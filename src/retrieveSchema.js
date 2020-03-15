@@ -107,7 +107,8 @@ const query = {
         return `SELECT p.proname, n.nspname, pg_get_functiondef(p.oid) as definition, p.proowner::regrole::name as owner, oidvectortypes(proargtypes) as argtypes
                 FROM pg_proc p
                 INNER JOIN pg_namespace n ON n.oid = p.pronamespace
-                WHERE n.nspname IN ('${schemas.join("','")}')`
+                WHERE p.prokind <> 'a' and n.nspname IN ('${schemas.join("','")}')`
+        //p.prokind <> 'a' works in pg 11, lower versions ( todo which ) have a p.proisaggr clumn
     },
     "getFunctionPrivileges": function(schemaName, functionName, argTypes) {
         //TODO: Instead of using ::regnamespace casting, for better performance join with pg_namespace
