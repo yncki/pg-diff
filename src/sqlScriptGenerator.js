@@ -33,39 +33,40 @@ var helper = {
     },
     __generateTableGrantsDefinition: function(table, role, privileges) {
         let definitions = [];
+        if (global.checkGrants) {
+            if (privileges.select) definitions.push(`GRANT SELECT ON TABLE ${table} TO ${role};${hints.potentialRoleMissing}`);
 
-        if (privileges.select) definitions.push(`GRANT SELECT ON TABLE ${table} TO ${role};${hints.potentialRoleMissing}`);
+            if (privileges.insert) definitions.push(`GRANT INSERT ON TABLE ${table} TO ${role};${hints.potentialRoleMissing}`);
 
-        if (privileges.insert) definitions.push(`GRANT INSERT ON TABLE ${table} TO ${role};${hints.potentialRoleMissing}`);
+            if (privileges.update) definitions.push(`GRANT UPDATE ON TABLE ${table} TO ${role};${hints.potentialRoleMissing}`);
 
-        if (privileges.update) definitions.push(`GRANT UPDATE ON TABLE ${table} TO ${role};${hints.potentialRoleMissing}`);
+            if (privileges.delete) definitions.push(`GRANT DELETE ON TABLE ${table} TO ${role};${hints.potentialRoleMissing}`);
 
-        if (privileges.delete) definitions.push(`GRANT DELETE ON TABLE ${table} TO ${role};${hints.potentialRoleMissing}`);
+            if (privileges.truncate) definitions.push(`GRANT TRUNCATE ON TABLE ${table} TO ${role};${hints.potentialRoleMissing}`);
 
-        if (privileges.truncate) definitions.push(`GRANT TRUNCATE ON TABLE ${table} TO ${role};${hints.potentialRoleMissing}`);
+            if (privileges.references) definitions.push(`GRANT REFERENCES ON TABLE ${table} TO ${role};${hints.potentialRoleMissing}`);
 
-        if (privileges.references) definitions.push(`GRANT REFERENCES ON TABLE ${table} TO ${role};${hints.potentialRoleMissing}`);
+            if (privileges.trigger) definitions.push(`GRANT TRIGGER ON TABLE ${table} TO ${role};${hints.potentialRoleMissing}`);
 
-        if (privileges.trigger) definitions.push(`GRANT TRIGGER ON TABLE ${table} TO ${role};${hints.potentialRoleMissing}`);
-
+        }
         return definitions;
     },
     __generateProcedureGrantsDefinition: function(procedure, argTypes, role, privileges) {
         let definitions = [];
-
-        if (privileges.execute) definitions.push(`GRANT EXECUTE ON FUNCTION ${procedure}(${argTypes}) TO ${role};${hints.potentialRoleMissing}`);
-
+        if (global.checkGrants) {
+            if (privileges.execute) definitions.push(`GRANT EXECUTE ON FUNCTION ${procedure}(${argTypes}) TO ${role};${hints.potentialRoleMissing}`);
+        }
         return definitions;
     },
     __generateSequenceGrantsDefinition: function(sequence, role, privileges) {
         let definitions = [];
+        if (global.checkGrants) {
+            if (privileges.select) definitions.push(`GRANT SELECT ON SEQUENCE ${sequence} TO ${role};${hints.potentialRoleMissing}`);
 
-        if (privileges.select) definitions.push(`GRANT SELECT ON SEQUENCE ${sequence} TO ${role};${hints.potentialRoleMissing}`);
+            if (privileges.usage) definitions.push(`GRANT USAGE ON SEQUENCE ${sequence} TO ${role};${hints.potentialRoleMissing}`);
 
-        if (privileges.usage) definitions.push(`GRANT USAGE ON SEQUENCE ${sequence} TO ${role};${hints.potentialRoleMissing}`);
-
-        if (privileges.update) definitions.push(`GRANT UPDATE ON SEQUENCE ${sequence} TO ${role};${hints.potentialRoleMissing}`);
-
+            if (privileges.update) definitions.push(`GRANT UPDATE ON SEQUENCE ${sequence} TO ${role};${hints.potentialRoleMissing}`);
+        }
         return definitions;
     },
     generateCreateSchemaScript: function(schema, owner) {
@@ -107,11 +108,14 @@ var helper = {
 
         //Generate privileges script
         let privileges = [];
-        privileges.push(
-            `ALTER ${global.config.options.schemaCompare.idempotentScript ? "TABLE IF EXISTS" : "TABLE"} ${table} OWNER TO ${schema.owner};\n`,
-        );
-        for (let role in schema.privileges) {
-            privileges = privileges.concat(this.__generateTableGrantsDefinition(table, role, schema.privileges[role]));
+        if (global.checkGrants) {
+            privileges.push(
+                `ALTER ${global.config.options.schemaCompare.idempotentScript ? "TABLE IF EXISTS" : "TABLE"} ${table} OWNER TO ${schema.owner};\n`,
+            );
+
+            for (let role in schema.privileges) {
+                privileges = privileges.concat(this.__generateTableGrantsDefinition(table, role, schema.privileges[role]));
+            }
         }
 
         let script = `\nCREATE ${global.config.options.schemaCompare.idempotentScript ? "TABLE IF NOT EXISTS" : "TABLE"} ${table} (\n\t${columns.join(
@@ -201,73 +205,78 @@ var helper = {
     },
     generateChangesTableRoleGrantsScript: function(table, role, changes) {
         let privileges = [];
+        if (global.checkGrants) {
+            if (changes.hasOwnProperty("select"))
+                privileges.push(
+                    `${changes.select ? "GRANT" : "REVOKE"} SELECT ON TABLE ${table} ${changes.select ? "TO" : "FROM"} ${role};${
+                        hints.potentialRoleMissing
+                    }`,
+                );
 
-        if (changes.hasOwnProperty("select"))
-            privileges.push(
-                `${changes.select ? "GRANT" : "REVOKE"} SELECT ON TABLE ${table} ${changes.select ? "TO" : "FROM"} ${role};${
-                    hints.potentialRoleMissing
-                }`,
-            );
+            if (changes.hasOwnProperty("insert"))
+                privileges.push(
+                    `${changes.insert ? "GRANT" : "REVOKE"} INSERT ON TABLE ${table} ${changes.insert ? "TO" : "FROM"} ${role};${
+                        hints.potentialRoleMissing
+                    }`,
+                );
 
-        if (changes.hasOwnProperty("insert"))
-            privileges.push(
-                `${changes.insert ? "GRANT" : "REVOKE"} INSERT ON TABLE ${table} ${changes.insert ? "TO" : "FROM"} ${role};${
-                    hints.potentialRoleMissing
-                }`,
-            );
+            if (changes.hasOwnProperty("update"))
+                privileges.push(
+                    `${changes.update ? "GRANT" : "REVOKE"} UPDATE ON TABLE ${table} ${changes.update ? "TO" : "FROM"} ${role};${
+                        hints.potentialRoleMissing
+                    }`,
+                );
 
-        if (changes.hasOwnProperty("update"))
-            privileges.push(
-                `${changes.update ? "GRANT" : "REVOKE"} UPDATE ON TABLE ${table} ${changes.update ? "TO" : "FROM"} ${role};${
-                    hints.potentialRoleMissing
-                }`,
-            );
+            if (changes.hasOwnProperty("delete"))
+                privileges.push(
+                    `${changes.delete ? "GRANT" : "REVOKE"} DELETE ON TABLE ${table} ${changes.delete ? "TO" : "FROM"} ${role};${
+                        hints.potentialRoleMissing
+                    }`,
+                );
 
-        if (changes.hasOwnProperty("delete"))
-            privileges.push(
-                `${changes.delete ? "GRANT" : "REVOKE"} DELETE ON TABLE ${table} ${changes.delete ? "TO" : "FROM"} ${role};${
-                    hints.potentialRoleMissing
-                }`,
-            );
+            if (changes.hasOwnProperty("truncate"))
+                privileges.push(
+                    `${changes.truncate ? "GRANT" : "REVOKE"} TRUNCATE ON TABLE ${table} ${changes.truncate ? "TO" : "FROM"} ${role};${
+                        hints.potentialRoleMissing
+                    }`,
+                );
 
-        if (changes.hasOwnProperty("truncate"))
-            privileges.push(
-                `${changes.truncate ? "GRANT" : "REVOKE"} TRUNCATE ON TABLE ${table} ${changes.truncate ? "TO" : "FROM"} ${role};${
-                    hints.potentialRoleMissing
-                }`,
-            );
+            if (changes.hasOwnProperty("references"))
+                privileges.push(
+                    `${changes.references ? "GRANT" : "REVOKE"} REFERENCES ON TABLE ${table} ${changes.references ? "TO" : "FROM"} ${role};${
+                        hints.potentialRoleMissing
+                    }`,
+                );
 
-        if (changes.hasOwnProperty("references"))
-            privileges.push(
-                `${changes.references ? "GRANT" : "REVOKE"} REFERENCES ON TABLE ${table} ${changes.references ? "TO" : "FROM"} ${role};${
-                    hints.potentialRoleMissing
-                }`,
-            );
-
-        if (changes.hasOwnProperty("trigger"))
-            privileges.push(
-                `${changes.trigger ? "GRANT" : "REVOKE"} TRIGGER ON TABLE ${table} ${changes.trigger ? "TO" : "FROM"} ${role};${
-                    hints.potentialRoleMissing
-                }`,
-            );
+            if (changes.hasOwnProperty("trigger"))
+                privileges.push(
+                    `${changes.trigger ? "GRANT" : "REVOKE"} TRIGGER ON TABLE ${table} ${changes.trigger ? "TO" : "FROM"} ${role};${
+                        hints.potentialRoleMissing
+                    }`,
+                );
+        }
 
         let script = `\n${privileges.join("\n")}\n`;
         return script;
     },
     generateChangeTableOwnerScript: function(table, owner) {
-        let script = `\nALTER ${global.config.options.schemaCompare.idempotentScript ? "TABLE IF EXISTS" : "TABLE"} ${table} OWNER TO ${owner};\n`;
-        return script;
+        if (global.checkGrants) {
+            let script = `\nALTER ${global.config.options.schemaCompare.idempotentScript ? "TABLE IF EXISTS" : "TABLE"} ${table} OWNER TO ${owner};\n`;
+            return script;
+        }
+        return '';
     },
     generateCreateViewScript: function(view, schema) {
         //Generate privileges script
         let privileges = [];
-        privileges.push(
-            `ALTER ${global.config.options.schemaCompare.idempotentScript ? "VIEW IF EXISTS" : "VIEW"} ${view} OWNER TO ${schema.owner};`,
-        );
-        for (let role in schema.privileges) {
-            privileges = privileges.concat(this.__generateTableGrantsDefinition(view, role, schema.privileges[role]));
+        if (global.checkGrants) {
+            privileges.push(
+                `ALTER ${global.config.options.schemaCompare.idempotentScript ? "VIEW IF EXISTS" : "VIEW"} ${view} OWNER TO ${schema.owner};`,
+            );
+            for (let role in schema.privileges) {
+                privileges = privileges.concat(this.__generateTableGrantsDefinition(view, role, schema.privileges[role]));
+            }
         }
-
         let script = `\nCREATE ${global.config.options.schemaCompare.idempotentScript ? "OR REPLACE VIEW" : "VIEW"} ${view} AS ${
             schema.definition
         }\n${privileges.join("\n")}\n`;
@@ -286,15 +295,16 @@ var helper = {
 
         //Generate privileges script
         let privileges = [];
-        privileges.push(
-            `ALTER ${global.config.options.schemaCompare.idempotentScript ? "MATERIALIZED VIEW IF EXISTS" : "MATERIALIZED VIEW"} ${view} OWNER TO ${
-                schema.owner
-            };\n`,
-        );
-        for (let role in schema.privileges) {
-            privileges = privileges.concat(this.__generateTableGrantsDefinition(view, role, schema.privileges[role]));
+        if (global.checkGrants) {
+            privileges.push(
+                `ALTER ${global.config.options.schemaCompare.idempotentScript ? "MATERIALIZED VIEW IF EXISTS" : "MATERIALIZED VIEW"} ${view} OWNER TO ${
+                    schema.owner
+                };\n`,
+            );
+            for (let role in schema.privileges) {
+                privileges = privileges.concat(this.__generateTableGrantsDefinition(view, role, schema.privileges[role]));
+            }
         }
-
         let script = `\nCREATE ${
             global.config.options.schemaCompare.idempotentScript ? "MATERIALIZED VIEW IF NOT EXISTS" : "MATERIALIZED VIEW"
         } ${view} AS ${schema.definition}\n${indexes.join("\n")}\n${privileges.join("\n")}\n`;
@@ -307,11 +317,12 @@ var helper = {
     generateCreateProcedureScript: function(procedure, schema) {
         //Generate privileges script
         let privileges = [];
-        privileges.push(`ALTER FUNCTION ${procedure}(${schema.argTypes}) OWNER TO ${schema.owner};`);
-        for (let role in schema.privileges) {
-            privileges = privileges.concat(this.__generateProcedureGrantsDefinition(procedure, schema.argTypes, role, schema.privileges[role]));
+        if (global.checkGrants) {
+            privileges.push(`ALTER FUNCTION ${procedure}(${schema.argTypes}) OWNER TO ${schema.owner};`);
+            for (let role in schema.privileges) {
+                privileges = privileges.concat(this.__generateProcedureGrantsDefinition(procedure, schema.argTypes, role, schema.privileges[role]));
+            }
         }
-
         let script = `\n${schema.definition};\n${privileges.join("\n")}\n`;
         return script;
     },
@@ -331,20 +342,23 @@ var helper = {
     },
     generateChangesProcedureRoleGrantsScript: function(procedure, argTypes, role, changes) {
         let privileges = [];
-
-        if (changes.hasOwnProperty("execute"))
-            privileges.push(
-                `${changes.execute ? "GRANT" : "REVOKE"} EXECUTE ON FUNCTION ${procedure}(${argTypes}) ${changes.execute ? "TO" : "FROM"} ${role};${
-                    hints.potentialRoleMissing
-                }`,
-            );
-
+        if (global.checkGrants) {
+            if (changes.hasOwnProperty("execute"))
+                privileges.push(
+                    `${changes.execute ? "GRANT" : "REVOKE"} EXECUTE ON FUNCTION ${procedure}(${argTypes}) ${changes.execute ? "TO" : "FROM"} ${role};${
+                        hints.potentialRoleMissing
+                    }`,
+                );
+        }
         let script = `\n${privileges.join("\n")}`;
         return script;
     },
     generateChangeProcedureOwnerScript: function(procedure, argTypes, owner) {
-        let script = `\nALTER FUNCTION ${procedure}(${argTypes}) OWNER TO ${owner};`;
-        return script;
+        if (global.checkGrants) {
+            let script = `\nALTER FUNCTION ${procedure}(${argTypes}) OWNER TO ${owner};`;
+            return script;
+        }
+        return '';
     },
     generateUpdateTableRecordScript: function(table, fields, filterConditions, changes) {
         let updates = [];
@@ -465,6 +479,7 @@ var helper = {
     },
     generateChangeSequencePropertyScript(sequence, property, value) {
         var definition = "";
+        var skip = false;
         switch (property) {
             case "startValue":
                 definition = `START WITH ${value}`;
@@ -485,39 +500,46 @@ var helper = {
                 definition = `${value ? "" : "NO"} CYCLE`;
                 break;
             case "owner":
-                definition = `OWNER TO ${value}`;
+                if (global.checkGrants) {
+                    definition = `OWNER TO ${value}`;
+                } else {
+                    skip = true;
+                }
                 break;
         }
-
-        let script = `\nALTER ${
-            global.config.options.schemaCompare.idempotentScript ? "SEQUENCE IF EXISTS" : "SEQUENCE"
-        } ${sequence} ${definition};\n`;
-        return script;
+        if (skip){
+            return '';
+        } else {
+            let script = `\nALTER ${
+                global.config.options.schemaCompare.idempotentScript ? "SEQUENCE IF EXISTS" : "SEQUENCE"
+            } ${sequence} ${definition};\n`;
+            return script;
+        }
     },
     generateChangesSequenceRoleGrantsScript: function(sequence, role, changes) {
         let privileges = [];
+        if (global.checkGrants) {
+            if (changes.hasOwnProperty("select"))
+                privileges.push(
+                    `${changes.select ? "GRANT" : "REVOKE"} SELECT ON SEQUENCE ${sequence} ${changes.select ? "TO" : "FROM"} ${role};${
+                        hints.potentialRoleMissing
+                    }`,
+                );
 
-        if (changes.hasOwnProperty("select"))
-            privileges.push(
-                `${changes.select ? "GRANT" : "REVOKE"} SELECT ON SEQUENCE ${sequence} ${changes.select ? "TO" : "FROM"} ${role};${
-                    hints.potentialRoleMissing
-                }`,
-            );
+            if (changes.hasOwnProperty("usage"))
+                privileges.push(
+                    `${changes.usage ? "GRANT" : "REVOKE"} USAGE ON SEQUENCE ${sequence} ${changes.usage ? "TO" : "FROM"} ${role};${
+                        hints.potentialRoleMissing
+                    }`,
+                );
 
-        if (changes.hasOwnProperty("usage"))
-            privileges.push(
-                `${changes.usage ? "GRANT" : "REVOKE"} USAGE ON SEQUENCE ${sequence} ${changes.usage ? "TO" : "FROM"} ${role};${
-                    hints.potentialRoleMissing
-                }`,
-            );
-
-        if (changes.hasOwnProperty("update"))
-            privileges.push(
-                `${changes.update ? "GRANT" : "REVOKE"} UPDATE ON SEQUENCE ${sequence} ${changes.update ? "TO" : "FROM"} ${role};${
-                    hints.potentialRoleMissing
-                }`,
-            );
-
+            if (changes.hasOwnProperty("update"))
+                privileges.push(
+                    `${changes.update ? "GRANT" : "REVOKE"} UPDATE ON SEQUENCE ${sequence} ${changes.update ? "TO" : "FROM"} ${role};${
+                        hints.potentialRoleMissing
+                    }`,
+                );
+        }
         let script = `\n${privileges.join("\n")}`;
 
         return script;
@@ -529,11 +551,12 @@ var helper = {
     generateCreateSequenceScript: function(sequence, schema) {
         //Generate privileges script
         let privileges = [];
-        privileges.push(`ALTER SEQUENCE ${sequence} OWNER TO ${schema.owner};`);
-        for (let role in schema.privileges) {
-            privileges = privileges.concat(this.__generateSequenceGrantsDefinition(sequence, role, schema.privileges[role]));
+        if (global.checkGrants) {
+            privileges.push(`ALTER SEQUENCE ${sequence} OWNER TO ${schema.owner};`);
+            for (let role in schema.privileges) {
+                privileges = privileges.concat(this.__generateSequenceGrantsDefinition(sequence, role, schema.privileges[role]));
+            }
         }
-
         let script = `\n
 CREATE ${global.config.options.schemaCompare.idempotentScript ? "SEQUENCE IF NOT EXISTS" : "SEQUENCE"} ${sequence} 
 \tINCREMENT BY ${schema.increment} 
