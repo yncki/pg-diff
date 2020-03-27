@@ -280,6 +280,8 @@ async function __initDbConnections() {
 }
 
 async function __runComparison() {
+
+
     log();
     log(chalk.yellow("Collect SOURCE database objects"));
     let sourceSchema = await schema.collectSchemaObjects(
@@ -287,6 +289,7 @@ async function __runComparison() {
         global.config.options.schemaCompare.namespaces,
         global.sourceDatabaseVersion,
     );
+
 
     log();
     log();
@@ -329,7 +332,7 @@ async function __runComparison() {
         log(chalk.yellow("Data compare not enabled!"));
     }
 
-    let scriptFilePath = await __saveSqlScript(scripts);
+    let scriptFilePath = await __saveSqlScript(scripts,sourceSchema,targetSchema);
 
     log();
     log();
@@ -350,7 +353,7 @@ function __handleError(e) {
     }
 }
 
-async function __saveSqlScript(scriptLines) {
+async function __saveSqlScript(scriptLines,sourceSchema,targetSchema) {
     return new Promise((resolve, reject) => {
         const now = new Date();
         const fileName = `${now.toISOString().replace(/[-:\.TZ]/g, "")}_${global.scriptName}.sql`;
@@ -368,6 +371,9 @@ async function __saveSqlScript(scriptLines) {
         file.write(`/******************${"*".repeat(titleLength + 2)}***/\n`);
         file.write(`/*** SCRIPT AUTHOR: ${global.config.options.author.padEnd(titleLength)} ***/\n`);
         file.write(`/***    CREATED ON: ${now.toISOString().padEnd(titleLength)} ***/\n`);
+        file.write(`/***    SOURCE: ${global.sourceClient.database} @ ${global.sourceClient.host} ***/\n`);
+        file.write(`/***    TARGET: ${global.targetClient.database} @ ${global.targetClient.host} ***/\n`);
+       // console.log(sourceSchema);
         file.write(`/******************${"*".repeat(titleLength + 2)}***/\n`);
 
         scriptLines.forEach(function(line) {
