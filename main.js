@@ -366,6 +366,8 @@ async function __runComparison() {
 
     let scriptFilePath = await __saveSqlScript(scripts,sourceSchema,targetSchema);
 
+    clearEmptyLines(scriptFilePath);
+
     log();
     log();
     log(chalk.whiteBright("SQL patch file has been created succesfully at: ") + chalk.green(scriptFilePath));
@@ -413,11 +415,6 @@ async function __saveSqlScript(scriptLines,sourceSchema,targetSchema) {
         });
 
         file.end();
-
-        clearEmptyLines(scriptPath);
-
-        //cleanup empty lines
-
     });
 }
 
