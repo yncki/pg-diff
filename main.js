@@ -366,7 +366,9 @@ async function __runComparison() {
 
     let scriptFilePath = await __saveSqlScript(scripts,sourceSchema,targetSchema);
 
+    log(chalk.yellow("Clearing output script..."));
     clearEmptyLines(scriptFilePath);
+    log(chalk.yellow("Clearing output script...done"));
 
     log();
     log();
@@ -380,10 +382,10 @@ function __handleError(e) {
     log(chalk.red(e));
     log(chalk.magenta(e.stack));
 
-    switch (e.code) {
-        case "MODULE_NOT_FOUND":
-            log(chalk.red('Please create the configuration file "pg-diff-config.json" in the same folder where you run pg-diff!'));
-            break;
+    if (e.code === "MODULE_NOT_FOUND") {
+        log(chalk.red('Please create the configuration file "pg-diff-config.json" in the same folder where you run pg-diff!'));
+    } else {
+        log(chalk.red('HandleError: ' + e.code));
     }
 }
 
@@ -430,7 +432,6 @@ async function __runSavePatch() {
     global.dataTypes = (await sourceClient.query(`SELECT oid, typcategory, typname FROM pg_type`)).rows;
     const migratePatch = require("./src/migratePatch");
     await migratePatch.savePatch();
-
     process.exit();
 }
 
@@ -438,12 +439,12 @@ function __parseSemVersion(version) {
     if (typeof version != "string") {
         return false;
     }
-    var splittedVersion = version.split(".");
+    let versionArray = version.split(".");
 
     return {
-        major: parseInt(splittedVersion[0]) || 0,
-        minor: parseInt(splittedVersion[1]) || 0,
-        patch: parseInt(splittedVersion[2]) || 0,
+        major: parseInt(versionArray[0]) || 0,
+        minor: parseInt(versionArray[1]) || 0,
+        patch: parseInt(versionArray[2]) || 0,
         value: version,
     };
 }
