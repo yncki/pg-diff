@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-
 const chalk = require("chalk");
 const { Spinner } = require("clui");
 const figlet = require("figlet");
@@ -76,6 +75,28 @@ function __printIntro() {
     log();
 }
 
+
+
+function clearEmptyLines(path) {
+
+    let content = fs.readFileSync(path, {encoding: 'utf8'});
+    content = content.replace(/(^[ \t]*\n)/gm, "");
+    fs.writeFileSync(path,content,{encoding: 'utf8'});
+
+    // fs.readFile(path, 'utf-8', function(err, data){
+    //     if (err) throw err;
+    //
+    //     // var newValue = data.replace(/^\./gim, 'myString');
+    //     // data = data.toString();
+    //     data = data.replace(/(^[ \t]*\n)/gm, "");
+    //     fs.writeFile(path + '.cleaned',  data.toString() , 'utf-8', function (err) {
+    //         if (err) throw err;
+    //         // console.log('filelistAsync complete');
+    //     });
+    // });
+}
+
+
 function __printOptions() {
     log();
     log(chalk.gray("CONFIGURED OPTIONS"));
@@ -110,7 +131,7 @@ async function __readArguments() {
         case "-c":
         case "--compare":
             {
-                if (args.length != 3) {
+                if (args.length !== 3) {
                     log(chalk.red("Missing arguments!"));
                     __printHelp();
                     process.exit();
@@ -129,13 +150,13 @@ async function __readArguments() {
         case "-mr":
         case "--migrate-replay":
             {
-                if (args.length != 2) {
+                if (args.length !== 2) {
                     log(chalk.red("Missing arguments!"));
                     __printHelp();
                     process.exit();
                 }
 
-                if (args[0] == "-mr" || args[0] == "--migrate-replay") global.replayMigration = true;
+                if (args[0] === "-mr" || args[0] === "--migrate-replay") global.replayMigration = true;
 
                 global.configName = args[1];
                 __loadConfig();
@@ -148,7 +169,7 @@ async function __readArguments() {
         case "-s":
         case "--save":
             {
-                if (args.length != 3) {
+                if (args.length !== 3) {
                     log(chalk.red("Missing arguments!"));
                     __printHelp();
                     process.exit();
@@ -181,6 +202,17 @@ function __loadConfig() {
         if (!global.config.source) throw new Error('The configuration doesn\'t contains the section "source (object)" !');
 
         if (!global.config.target) throw new Error('The configuration doesn\'t contains the section "target (object)" !');
+
+        let outputDirectory = path.resolve(process.cwd(), global.config.options.outputDirectory);
+
+        if (!fs.existsSync(outputDirectory)){
+            fs.mkdirSync(outputDirectory,{ recursive: true });
+            log('Creating output directory ' + outputDirectory);
+        }
+
+
+        // log(path.resolve(process.cwd(), global.config.options.outputDirectory));
+
     } catch (e) {
         __handleError(e);
         process.exitCode = -1;
@@ -249,7 +281,7 @@ async function __initDbConnections() {
         (await global.sourceClient.query("SELECT current_setting('server_version')")).rows[0].current_setting,
     );
     log(
-        chalk.whiteBright(
+        chalk.blue(
             `Connected to PostgreSQL ${global.sourceDatabaseVersion.value} on [${global.config.source.host}:${global.config.source.port}/${global.config.source.database}] `,
         ) + chalk.green("✓"),
     );
@@ -272,7 +304,7 @@ async function __initDbConnections() {
         (await global.targetClient.query("SELECT current_setting('server_version')")).rows[0].current_setting,
     );
     log(
-        chalk.whiteBright(
+        chalk.blue(
             `Connected to PostgreSQL ${global.targetDatabaseVersion.value} on [${global.config.target.host}:${global.config.target.port}/${global.config.target.database}] `,
         ) + chalk.green("✓"),
     );
@@ -381,6 +413,11 @@ async function __saveSqlScript(scriptLines,sourceSchema,targetSchema) {
         });
 
         file.end();
+
+        clearEmptyLines(scriptPath);
+
+        //cleanup empty lines
+
     });
 }
 

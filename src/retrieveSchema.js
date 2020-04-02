@@ -140,6 +140,7 @@ const query = {
     }
 }
 
+
 var helper = {
     __serverVersion: null,
     __progressBar: new Progress(20),
