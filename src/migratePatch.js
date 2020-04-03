@@ -3,6 +3,7 @@ const path = require("path");
 const textReader = require("line-by-line");
 const fs = require("fs");
 const chalk = require("chalk");
+const memory = require("./memory");
 
 var helper = {
     __status: {
@@ -12,8 +13,8 @@ var helper = {
         ERROR: "ERROR",
     },
     __migrationsHistoryTableExists: false,
-    __fullMigrationsHistoryTableName: `"${global.config.options.migration.tableSchema}"."${global.config.options.migration.tableName}"`,
-    __migrationsHistoryTableConstraintName: `"${global.config.options.migration.tableName}_pkey"`,
+    __fullMigrationsHistoryTableName: `"${memory.config.options.migration.tableSchema}"."${memory.config.options.migration.tableName}"`,
+    __migrationsHistoryTableConstraintName: `"${memory.config.options.migration.tableName}_pkey"`,
     __migrationsHistoryTableSchema: {
         columns: {
             version: {
@@ -71,14 +72,14 @@ var helper = {
         },
         indexes: {},
         privileges: {},
-        owner: global.config.target.user,
+        owner: memory.config.target.user,
     },
     applyPatch: async function(patchFileInfo) {
         await helper.__applyPatchFile(patchFileInfo);
     },
     getLatestPatchApplied: async function() {
         let sql = `SELECT "version" FROM ${helper.__fullMigrationsHistoryTableName} ORDER BY "version" DESC LIMIT 1;`;
-        let result = await global.targetClient.query(sql);
+        let result = await memory.targetClient.query(sql);
         let lastVersionApplied = 0;
 
         if (result.rows.length > 0) lastVersionApplied = result.rows[0].version;
@@ -88,12 +89,12 @@ var helper = {
     savePatch: async function() {
         await helper.__prepareMigrationsHistoryTable();
 
-        let scriptsFolder = path.resolve(process.cwd(), global.config.options.outputDirectory);
-        let scriptFile = path.resolve(scriptsFolder, global.scriptName);
+        let scriptsFolder = path.resolve(process.cwd(), memory.config.options.outputDirectory);
+        let scriptFile = path.resolve(scriptsFolder, memory.scriptName);
 
         if (!fs.existsSync(scriptFile)) throw new Error(`The patch file ${scriptFile} does not exists!`);
 
-        let patchFileInfo = helper.__getPatchFileInfo(global.scriptName, scriptsFolder);
+        let patchFileInfo = helper.__getPatchFileInfo(memory.scriptName, scriptsFolder);
         await helper.__addRecordToHistoryTable(patchFileInfo.version, patchFileInfo.name);
         console.log(chalk.green(`The patch version={${patchFileInfo.version}} and name={${patchFileInfo.name}} has been registered.`));
 
@@ -103,7 +104,7 @@ var helper = {
     migrate: async function() {
         await helper.__prepareMigrationsHistoryTable();
 
-        let scriptsFolder = path.resolve(process.cwd(), global.config.options.outputDirectory);
+        let scriptsFolder = path.resolve(process.cwd(), memory.config.options.outputDirectory);
         let scriptFiles = fs
             .readdirSync(scriptsFolder)
             .sort()
@@ -118,7 +119,7 @@ var helper = {
             switch (patchStatus) {
                 case helper.__status.IN_PROGRESS:
                     {
-                        if (!global.replayMigration)
+                        if (!memory.replayMigration)
                             throw new Error(
                                 `The patch version={${patchFileInfo.version}} and name={${patchFileInfo.name}} is still in progress! Use command argument "-mr" to replay this script.`,
                             );
@@ -128,7 +129,7 @@ var helper = {
                     break;
                 case helper.__status.ERROR:
                     {
-                        if (!global.replayMigration)
+                        if (!memory.replayMigration)
                             throw new Error(
                                 `The patch version={${patchFileInfo.version}} and name={${patchFileInfo.name}} encountered an error! Use command argument "-mr" to replay this script.`,
                             );
@@ -156,7 +157,7 @@ var helper = {
     },
     async __checkPatchStatus(patchFileInfo) {
         let sql = `SELECT "status" FROM ${helper.__fullMigrationsHistoryTableName} WHERE "version" = '${patchFileInfo.version}' AND "name" = '${patchFileInfo.name}'`;
-        let response = await global.targetClient.query(sql);
+        let response = await memory.targetClient.query(sql);
 
         if (response.rows.length > 1)
             throw new Error(
@@ -257,7 +258,7 @@ var helper = {
     },
     __executePatchScript: async function(scriptPatch) {
         await helper.__updateRecordToHistoryTable(helper.__status.IN_PROGRESS, scriptPatch.message, scriptPatch.command, scriptPatch.version);
-        await global.targetClient.query(scriptPatch.command);
+        await memory.targetClient.query(scriptPatch.command);
     },
     __updateRecordToHistoryTable: async function(status, message, script, patchVersion) {
         let changes = {
@@ -277,7 +278,7 @@ var helper = {
             filterConditions,
             changes,
         );
-        await global.targetClient.query(command);
+        await memory.targetClient.query(command);
     },
     __addRecordToHistoryTable: async function(patchVersion, patchName) {
         let changes = {
@@ -294,15 +295,17 @@ var helper = {
         };
 
         let command = sql.generateMergeTableRecord(helper.__fullMigrationsHistoryTableName, helper.__getFieldDataTypeIDs(), changes, options);
-        await global.targetClient.query(command);
+        await memory.targetClient.query(command);
     },
     __getFieldDataTypeIDs: function() {
         let fields = [];
         for (let column in helper.__migrationsHistoryTableSchema.columns) {
-            fields.push({
-                name: column,
-                dataTypeID: helper.__migrationsHistoryTableSchema.columns[column].dataTypeID,
-            });
+            if (helper.__migrationsHistoryTableSchema.columns.hasOwnProperty(column)) {
+                fields.push({
+                    name: column,
+                    dataTypeID: helper.__migrationsHistoryTableSchema.columns[column].dataTypeID,
+                });
+            }
         }
         return fields;
     },
@@ -313,7 +316,7 @@ var helper = {
                 definition: 'PRIMARY KEY ("version")',
             };
 
-            helper.__migrationsHistoryTableSchema.privileges[global.config.target.user] = {
+            helper.__migrationsHistoryTableSchema.privileges[memory.config.target.user] = {
                 select: true,
                 insert: true,
                 update: true,
@@ -323,14 +326,14 @@ var helper = {
                 trigger: true,
             };
 
-            let saveIdempotentSetting = global.config.options.schemaCompare.idempotentScript;
-            global.config.options.schemaCompare.idempotentScript = true;
+            let saveIdempotentSetting = memory.config.options.schemaCompare.idempotentScript;
+            memory.config.options.schemaCompare.idempotentScript = true;
 
             let sqlScript = sql.generateCreateTableScript(helper.__fullMigrationsHistoryTableName, helper.__migrationsHistoryTableSchema);
-            await global.targetClient.query(sqlScript);
+            await memory.targetClient.query(sqlScript);
 
             helper.__migrationsHistoryTableExists = true;
-            global.config.options.schemaCompare.idempotentScript = saveIdempotentSetting;
+            memory.config.options.schemaCompare.idempotentScript = saveIdempotentSetting;
         }
     },
 };

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+const memory = require("./src/memory");
 const chalk = require("chalk");
 const { Spinner } = require("clui");
 const figlet = require("figlet");
@@ -15,14 +16,6 @@ const log = console.log;
 
 pgTypes.setTypeParser(1114, value => new Date(Date.parse(`${value}+0000`)));
 
-global.configName = "";
-global.scriptName = "";
-global.config = null;
-global.replayMigration = false;
-global.checkGrants = false;
-global.schemaChanges = {
-    newColumns: {},
-};
 
 __printIntro();
 __readArguments().catch(err => {
@@ -100,12 +93,12 @@ function clearEmptyLines(path) {
 function __printOptions() {
     log();
     log(chalk.gray("CONFIGURED OPTIONS"));
-    log(chalk.yellow("         Script Author: ") + chalk.green(global.config.options.author));
-    log(chalk.yellow("      Output Directory: ") + chalk.green(path.resolve(process.cwd(), global.config.options.outputDirectory)));
-    log(chalk.yellow("     Schema Namespaces: ") + chalk.green(global.config.options.schemaCompare.namespaces));
-    log(chalk.yellow("     Idempotent Script: ") + chalk.green(global.config.options.schemaCompare.idempotentScript ? "ENABLED" : "DISABLED"));
-    log(chalk.yellow("          Data Compare: ") + chalk.green(global.config.options.dataCompare.enable ? "ENABLED" : "DISABLED"));
-    log(chalk.yellow("          Check grants: ") + chalk.green(global.checkGrants ? "ENABLED" : "DISABLED"));
+    log(chalk.yellow("         Script Author: ") + chalk.green(memory.config.options.author));
+    log(chalk.yellow("      Output Directory: ") + chalk.green(path.resolve(process.cwd(), memory.config.options.outputDirectory)));
+    log(chalk.yellow("     Schema Namespaces: ") + chalk.green(memory.config.options.schemaCompare.namespaces));
+    log(chalk.yellow("     Idempotent Script: ") + chalk.green(memory.config.options.schemaCompare.idempotentScript ? "ENABLED" : "DISABLED"));
+    log(chalk.yellow("          Data Compare: ") + chalk.green(memory.config.options.dataCompare.enable ? "ENABLED" : "DISABLED"));
+    log(chalk.yellow("          Check grants: ") + chalk.green(memory.checkGrants ? "ENABLED" : "DISABLED"));
     log();
 }
 
@@ -125,7 +118,7 @@ async function __readArguments() {
         }
         case "-cg":
         case "-checkGrants":
-            global.checkGrants = true;
+            memory.checkGrants = true;
             break;
 
         case "-c":
@@ -136,8 +129,8 @@ async function __readArguments() {
                     __printHelp();
                     process.exit();
                 }
-                global.configName = args[1];
-                global.scriptName = args[2];
+                memory.configName = args[1];
+                memory.scriptName = args[2];
                 __loadConfig();
                 __validateCompareConfig();
                 __printOptions();
@@ -156,9 +149,9 @@ async function __readArguments() {
                     process.exit();
                 }
 
-                if (args[0] === "-mr" || args[0] === "--migrate-replay") global.replayMigration = true;
+                if (args[0] === "-mr" || args[0] === "--migrate-replay") memory.replayMigration = true;
 
-                global.configName = args[1];
+                memory.configName = args[1];
                 __loadConfig();
                 __validateMigrationConfig();
                 __printOptions();
@@ -174,8 +167,8 @@ async function __readArguments() {
                     __printHelp();
                     process.exit();
                 }
-                global.configName = args[1];
-                global.scriptName = args[2];
+                memory.configName = args[1];
+                memory.scriptName = args[2];
                 __loadConfig();
                 __printOptions();
                 await __initDbConnections();
@@ -193,17 +186,18 @@ async function __readArguments() {
 function __loadConfig() {
     try {
         let configFile = require(path.resolve(process.cwd(), "pg-diff-config.json"));
-        if (!configFile[global.configName]) throw new Error(`Impossible to find the configuration with name ${global.configName} !`);
+        if (!configFile[memory.configName]) throw new Error(`Impossible to find the configuration with name ${memory.configName} !`);
+        console.log(`Using ${memory.configName}`);
 
-        global.config = configFile[global.configName];
+        memory.config = configFile[memory.configName];
 
-        if (!global.config.options) throw new Error('The configuration section "options" must exists !');
+        if (!memory.config.options) throw new Error('The configuration section "options" must exists !');
 
-        if (!global.config.source) throw new Error('The configuration doesn\'t contains the section "source (object)" !');
+        if (!memory.config.source) throw new Error('The configuration doesn\'t contains the section "source (object)" !');
 
-        if (!global.config.target) throw new Error('The configuration doesn\'t contains the section "target (object)" !');
+        if (!memory.config.target) throw new Error('The configuration doesn\'t contains the section "target (object)" !');
 
-        let outputDirectory = path.resolve(process.cwd(), global.config.options.outputDirectory);
+        let outputDirectory = path.resolve(process.cwd(), memory.config.options.outputDirectory);
 
         if (!fs.existsSync(outputDirectory)){
             fs.mkdirSync(outputDirectory,{ recursive: true });
@@ -211,7 +205,7 @@ function __loadConfig() {
         }
 
 
-        // log(path.resolve(process.cwd(), global.config.options.outputDirectory));
+        // log(path.resolve(process.cwd(), memory.config.options.outputDirectory));
 
     } catch (e) {
         __handleError(e);
@@ -222,22 +216,22 @@ function __loadConfig() {
 
 function __validateCompareConfig() {
     try {
-        if (!global.config.options.outputDirectory)
+        if (!memory.config.options.outputDirectory)
             throw new Error('The configuration section "options" must contains property "outputDirectory (string)" !');
 
-        if (!global.config.options.schemaCompare)
+        if (!memory.config.options.schemaCompare)
             throw new Error('The configuration section "options" must contains property "schemaCompare (object)" !');
 
-        if (!global.config.options.schemaCompare.hasOwnProperty("namespaces"))
+        if (!memory.config.options.schemaCompare.hasOwnProperty("namespaces"))
             throw new Error('The configuration section "options.schemaCompare" must contains property "namespaces (array of strings)" !');
 
-        if (!global.config.options.schemaCompare.hasOwnProperty("idempotentScript"))
+        if (!memory.config.options.schemaCompare.hasOwnProperty("idempotentScript"))
             throw new Error('The configuration section "options.schemaCompare" must contains property "idempotentScript (boolean)" !');
 
-        if (!global.config.options.dataCompare)
+        if (!memory.config.options.dataCompare)
             throw new Error('The configuration section "options" must contains property "dataCompare (object)" !');
 
-        if (!global.config.options.dataCompare.hasOwnProperty("enable"))
+        if (!memory.config.options.dataCompare.hasOwnProperty("enable"))
             throw new Error('The configuration section "options.dataCompare" must contains property "enable (boolean)" !');
     } catch (e) {
         __handleError(e);
@@ -248,12 +242,12 @@ function __validateCompareConfig() {
 
 function __validateMigrationConfig() {
     try {
-        if (!global.config.options.migration) throw new Error('The configuration section "options" must contains property "migration (object)" !');
+        if (!memory.config.options.migration) throw new Error('The configuration section "options" must contains property "migration (object)" !');
 
-        if (!global.config.options.migration.hasOwnProperty("tableSchema"))
+        if (!memory.config.options.migration.hasOwnProperty("tableSchema"))
             throw new Error('The configuration section "options.migration" must contains property "tableSchema (string)" !');
 
-        if (!global.config.options.migration.hasOwnProperty("tableName"))
+        if (!memory.config.options.migration.hasOwnProperty("tableName"))
             throw new Error('The configuration section "options.migration" must contains property "tableName (string)" !');
     } catch (e) {
         __handleError(e);
@@ -267,48 +261,48 @@ async function __initDbConnections() {
     var spinner = new Spinner(chalk.blue("Connecting to source database ..."), ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"]);
     spinner.start();
 
-    global.sourceClient = new Client({
-        user: global.config.source.user,
-        host: global.config.source.host,
-        database: global.config.source.database,
-        password: global.config.source.password,
-        port: global.config.source.port,
+    memory.sourceClient = new Client({
+        user: memory.config.source.user,
+        host: memory.config.source.host,
+        database: memory.config.source.database,
+        password: memory.config.source.password,
+        port: memory.config.source.port,
     });
 
-    await global.sourceClient.connect();
+    await memory.sourceClient.connect();
     spinner.stop();
-    global.sourceDatabaseVersion = __parseSemVersion(
-        (await global.sourceClient.query("SELECT current_setting('server_version')")).rows[0].current_setting,
+    memory.sourceDatabaseVersion = __parseSemVersion(
+        (await memory.sourceClient.query("SELECT current_setting('server_version')")).rows[0].current_setting,
     );
     log(
         chalk.blue(
-            `Connected to PostgreSQL ${global.sourceDatabaseVersion.value} on [${global.config.source.host}:${global.config.source.port}/${global.config.source.database}] `,
+            `Connected to PostgreSQL ${memory.sourceDatabaseVersion.value} on [${memory.config.source.host}:${memory.config.source.port}/${memory.config.source.database}] `,
         ) + chalk.green("✓"),
     );
-    global.sourceClient.version = global.sourceDatabaseVersion;
+    memory.sourceClient.version = memory.sourceDatabaseVersion;
 
     var spinner = new Spinner(chalk.blue("Connecting to target database ..."), ["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"]);
     spinner.start();
 
-    global.targetClient = new Client({
-        user: global.config.target.user,
-        host: global.config.target.host,
-        database: global.config.target.database,
-        password: global.config.target.password,
-        port: global.config.target.port,
+    memory.targetClient = new Client({
+        user: memory.config.target.user,
+        host: memory.config.target.host,
+        database: memory.config.target.database,
+        password: memory.config.target.password,
+        port: memory.config.target.port,
     });
 
-    await global.targetClient.connect();
+    await memory.targetClient.connect();
     spinner.stop();
-    global.targetDatabaseVersion = __parseSemVersion(
-        (await global.targetClient.query("SELECT current_setting('server_version')")).rows[0].current_setting,
+    memory.targetDatabaseVersion = __parseSemVersion(
+        (await memory.targetClient.query("SELECT current_setting('server_version')")).rows[0].current_setting,
     );
     log(
         chalk.blue(
-            `Connected to PostgreSQL ${global.targetDatabaseVersion.value} on [${global.config.target.host}:${global.config.target.port}/${global.config.target.database}] `,
+            `Connected to PostgreSQL ${memory.targetDatabaseVersion.value} on [${memory.config.target.host}:${memory.config.target.port}/${memory.config.target.database}] `,
         ) + chalk.green("✓"),
     );
-    global.targetClient.version = global.targetDatabaseVersion;
+    memory.targetClient.version = memory.targetDatabaseVersion;
 }
 
 async function __runComparison() {
@@ -317,9 +311,9 @@ async function __runComparison() {
     log();
     log(chalk.yellow("Collect SOURCE database objects"));
     let sourceSchema = await schema.collectSchemaObjects(
-        global.sourceClient,
-        global.config.options.schemaCompare.namespaces,
-        global.sourceDatabaseVersion,
+        memory.sourceClient,
+        memory.config.options.schemaCompare.namespaces,
+        memory.sourceDatabaseVersion,
     );
 
 
@@ -327,36 +321,37 @@ async function __runComparison() {
     log();
     log(chalk.yellow("Collect TARGET database objects"));
     let targetSchema = await schema.collectSchemaObjects(
-        global.targetClient,
-        global.config.options.schemaCompare.namespaces,
-        global.targetDatabaseVersion,
+        memory.targetClient,
+        memory.config.options.schemaCompare.namespaces,
+        memory.targetDatabaseVersion,
     );
 
     log();
     log();
     log(chalk.yellow("Compare SOURCE with TARGET database objects"));
+
     let scripts = compareSchema.compareDatabaseObjects(sourceSchema, targetSchema);
 
     //console.dir(scripts, { depth: null });
 
-    if (global.config.options.dataCompare.enable) {
-        global.dataTypes = (await sourceClient.query(`SELECT oid, typcategory, typname FROM pg_type`)).rows;
+    if (memory.config.options.dataCompare.enable) {
+        memory.sourceDataTypes = (await sourceClient.query(`SELECT oid, typcategory, typname FROM pg_type`)).rows;
 
         log();
         log();
         log(chalk.yellow("Collect SOURCE tables records"));
-        let sourceTablesRecords = await data.collectTablesRecords(sourceClient, global.config.options.dataCompare.tables);
+        let sourceTablesRecords = await data.collectTablesRecords(sourceClient, memory.config.options.dataCompare.tables);
 
         log();
         log();
         log(chalk.yellow("Collect TARGET tables records"));
-        let targetTablesRecords = await data.collectTablesRecords(targetClient, global.config.options.dataCompare.tables);
+        let targetTablesRecords = await data.collectTablesRecords(targetClient, memory.config.options.dataCompare.tables);
 
         log();
         log();
         log(chalk.yellow("Compare SOURCE with TARGET database table records"));
         scripts = scripts.concat(
-            compareRecords.compareTablesRecords(global.config.options.dataCompare.tables, sourceTablesRecords, targetTablesRecords),
+            compareRecords.compareTablesRecords(memory.config.options.dataCompare.tables, sourceTablesRecords, targetTablesRecords),
         );
     } else {
         log();
@@ -392,8 +387,8 @@ function __handleError(e) {
 async function __saveSqlScript(scriptLines,sourceSchema,targetSchema) {
     return new Promise((resolve, reject) => {
         const now = new Date();
-        const fileName = `${now.toISOString().replace(/[-:\.TZ]/g, "")}_${global.scriptName}.sql`;
-        const scriptPath = path.resolve(process.cwd(), global.config.options.outputDirectory, fileName);
+        const fileName = `${now.toISOString().replace(/[-:\.TZ]/g, "")}_${memory.scriptName}.sql`;
+        const scriptPath = path.resolve(process.cwd(), memory.config.options.outputDirectory, fileName);
 
         var file = fs.createWriteStream(scriptPath);
 
@@ -402,13 +397,13 @@ async function __saveSqlScript(scriptLines,sourceSchema,targetSchema) {
         file.on("finish", () => resolve(scriptPath));
 
         let titleLength =
-            global.config.options.author.length > now.toISOString().length ? global.config.options.author.length : now.toISOString().length;
+            memory.config.options.author.length > now.toISOString().length ? memory.config.options.author.length : now.toISOString().length;
 
         file.write(`/******************${"*".repeat(titleLength + 2)}***/\n`);
-        file.write(`/*** SCRIPT AUTHOR: ${global.config.options.author.padEnd(titleLength)} ***/\n`);
+        file.write(`/*** SCRIPT AUTHOR: ${memory.config.options.author.padEnd(titleLength)} ***/\n`);
         file.write(`/***    CREATED ON: ${now.toISOString().padEnd(titleLength)} ***/\n`);
-        file.write(`/***    SOURCE: ${global.sourceClient.database} @ ${global.sourceClient.host} ***/\n`);
-        file.write(`/***    TARGET: ${global.targetClient.database} @ ${global.targetClient.host} ***/\n`);
+        file.write(`/***    SOURCE: ${memory.sourceClient.database} @ ${memory.sourceClient.host} ***/\n`);
+        file.write(`/***    TARGET: ${memory.targetClient.database} @ ${memory.targetClient.host} ***/\n`);
        // console.log(sourceSchema);
         file.write(`/******************${"*".repeat(titleLength + 2)}***/\n`);
 
@@ -421,7 +416,7 @@ async function __saveSqlScript(scriptLines,sourceSchema,targetSchema) {
 }
 
 async function __runMigration() {
-    global.dataTypes = (await sourceClient.query(`SELECT oid, typcategory, typname FROM pg_type`)).rows;
+    memory.sourceDataTypes = (await sourceClient.query(`SELECT oid, typcategory, typname FROM pg_type`)).rows;
     const migratePatch = require("./src/migratePatch");
     await migratePatch.migrate();
 
@@ -429,7 +424,7 @@ async function __runMigration() {
 }
 
 async function __runSavePatch() {
-    global.dataTypes = (await sourceClient.query(`SELECT oid, typcategory, typname FROM pg_type`)).rows;
+    memory.sourceDataTypes = (await sourceClient.query(`SELECT oid, typcategory, typname FROM pg_type`)).rows;
     const migratePatch = require("./src/migratePatch");
     await migratePatch.savePatch();
     process.exit();

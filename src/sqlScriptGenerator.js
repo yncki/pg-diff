@@ -1,3 +1,5 @@
+const memory = require("./memory");
+
 const hints = {
     addColumnNotNullableWithoutDefaultValue:
         " --WARN: Add a new column not nullable without a default value can occure in a sql error during execution!",
@@ -10,7 +12,7 @@ const hints = {
     dropTable: " --WARN: Drop table can occure in data loss!",
 };
 
-const helper = {
+module.exports = {
     __generateColumnDataTypeDefinition: function(columnSchema) {
         let dataType = columnSchema.datatype;
         if (columnSchema.precision) {
@@ -29,34 +31,27 @@ const helper = {
     },
     __generateTableGrantsDefinition: function(table, role, privileges) {
         let definitions = [];
-        if (global.checkGrants) {
+        if (memory.checkGrants) {
             if (privileges.select) definitions.push(`GRANT SELECT ON TABLE ${table} TO ${role};${hints.potentialRoleMissing}`);
-
             if (privileges.insert) definitions.push(`GRANT INSERT ON TABLE ${table} TO ${role};${hints.potentialRoleMissing}`);
-
             if (privileges.update) definitions.push(`GRANT UPDATE ON TABLE ${table} TO ${role};${hints.potentialRoleMissing}`);
-
             if (privileges.delete) definitions.push(`GRANT DELETE ON TABLE ${table} TO ${role};${hints.potentialRoleMissing}`);
-
             if (privileges.truncate) definitions.push(`GRANT TRUNCATE ON TABLE ${table} TO ${role};${hints.potentialRoleMissing}`);
-
             if (privileges.references) definitions.push(`GRANT REFERENCES ON TABLE ${table} TO ${role};${hints.potentialRoleMissing}`);
-
             if (privileges.trigger) definitions.push(`GRANT TRIGGER ON TABLE ${table} TO ${role};${hints.potentialRoleMissing}`);
-
         }
         return definitions;
     },
     __generateProcedureGrantsDefinition: function(procedure, argTypes, role, privileges) {
         let definitions = [];
-        if (global.checkGrants) {
+        if (memory.checkGrants) {
             if (privileges.execute) definitions.push(`GRANT EXECUTE ON FUNCTION ${procedure}(${argTypes}) TO ${role};${hints.potentialRoleMissing}`);
         }
         return definitions;
     },
     __generateSequenceGrantsDefinition: function(sequence, role, privileges) {
         let definitions = [];
-        if (global.checkGrants) {
+        if (memory.checkGrants) {
             if (privileges.select) definitions.push(`GRANT SELECT ON SEQUENCE ${sequence} TO ${role};${hints.potentialRoleMissing}`);
 
             if (privileges.usage) definitions.push(`GRANT USAGE ON SEQUENCE ${sequence} TO ${role};${hints.potentialRoleMissing}`);
@@ -67,17 +62,19 @@ const helper = {
     },
     generateCreateSchemaScript: function(schema, owner) {
         return `\nCREATE ${
-            global.config.options.schemaCompare.idempotentScript ? "SCHEMA IF NOT EXISTS" : "SCHEMA"
+            memory.config.options.schemaCompare.idempotentScript ? "SCHEMA IF NOT EXISTS" : "SCHEMA"
         } ${schema} AUTHORIZATION ${owner};\n`;
     },
     generateDropTableScript: function(table) {
-        return `\nDROP ${global.config.options.schemaCompare.idempotentScript ? "TABLE IF EXISTS" : "TABLE"} ${table};\n`;
+        return `\nDROP ${memory.config.options.schemaCompare.idempotentScript ? "TABLE IF EXISTS" : "TABLE"} ${table};\n`;
     },
     generateCreateTableScript: function(table, schema) {
         //Generate columns script
         let columns = [];
         for (let column in schema.columns) {
-            columns.push(this.__generateColumnDefinition(column, schema.columns[column]));
+            if (schema.columns.hasOwnProperty(column)) {
+                columns.push(this.__generateColumnDefinition(column, schema.columns[column]));
+            }
         }
 
         //Generate constraints script
@@ -91,20 +88,22 @@ const helper = {
         //Generate indexes script
         let indexes = [];
         for (let index in schema.indexes) {
-            let definition = schema.indexes[index].definition;
-            if (global.config.options.schemaCompare.idempotentScript) {
-                definition = definition.replace("CREATE INDEX", "CREATE INDEX IF NOT EXISTS");
-                definition = definition.replace("CREATE UNIQUE INDEX", "CREATE UNIQUE INDEX IF NOT EXISTS");
-            }
+            if (schema.indexes.hasOwnProperty(index)) {
+                let definition = schema.indexes[index].definition;
+                if (memory.config.options.schemaCompare.idempotentScript) {
+                    definition = definition.replace("CREATE INDEX", "CREATE INDEX IF NOT EXISTS");
+                    definition = definition.replace("CREATE UNIQUE INDEX", "CREATE UNIQUE INDEX IF NOT EXISTS");
+                }
 
-            indexes.push(`\n${definition};\n`);
+                indexes.push(`\n${definition};\n`);
+            }
         }
 
         //Generate privileges script
         let privileges = [];
-        if (global.checkGrants) {
+        if (memory.checkGrants) {
             privileges.push(
-                `ALTER ${global.config.options.schemaCompare.idempotentScript ? "TABLE IF EXISTS" : "TABLE"} ${table} OWNER TO ${schema.owner};\n`,
+                `ALTER ${memory.config.options.schemaCompare.idempotentScript ? "TABLE IF EXISTS" : "TABLE"} ${table} OWNER TO ${schema.owner};\n`,
             );
 
             for (let role in schema.privileges) {
@@ -112,13 +111,13 @@ const helper = {
             }
         }
 
-        return `\nCREATE ${global.config.options.schemaCompare.idempotentScript ? "TABLE IF NOT EXISTS" : "TABLE"} ${table} (\n\t${columns.join(
+        return `\nCREATE ${memory.config.options.schemaCompare.idempotentScript ? "TABLE IF NOT EXISTS" : "TABLE"} ${table} (\n\t${columns.join(
             ",\n\t",
         )}\n)\n${options};\n${indexes.join("\n")}\n${privileges.join("\n")}\n`;
     },
     generateAddTableColumnScript: function(table, column, schema) {
-        let script = `\nALTER ${global.config.options.schemaCompare.idempotentScript ? "TABLE IF EXISTS" : "TABLE"} ${table} ADD ${
-            global.config.options.schemaCompare.idempotentScript ? "COLUMN IF NOT EXISTS" : "COLUMN"
+        let script = `\nALTER ${memory.config.options.schemaCompare.idempotentScript ? "TABLE IF EXISTS" : "TABLE"} ${table} ADD ${
+            memory.config.options.schemaCompare.idempotentScript ? "COLUMN IF NOT EXISTS" : "COLUMN"
         } ${this.__generateColumnDefinition(column, schema)};`;
         if (script.includes("NOT NULL") && !script.includes("DEFAULT")) script += hints.addColumnNotNullableWithoutDefaultValue;
 
@@ -147,51 +146,49 @@ const helper = {
                 }`;
             } else {
                 //falsy values
-                identityDefinition = `DROP IDENTITY ${global.config.options.schemaCompare.idempotentScript ? "IF EXISTS" : ""}`;
+                identityDefinition = `DROP IDENTITY ${memory.config.options.schemaCompare.idempotentScript ? "IF EXISTS" : ""}`;
             }
             definitions.push(`ALTER COLUMN ${column} ${identityDefinition}`);
         }
 
-        let script = `\nALTER ${global.config.options.schemaCompare.idempotentScript ? "TABLE IF EXISTS" : "TABLE"} ${table}\n\t${definitions.join(
-            ",\n\t",
-        )};\n`;
-
         //TODO: Should we include COLLATE when change column data type?
 
-        return script;
+        return `\nALTER ${memory.config.options.schemaCompare.idempotentScript ? "TABLE IF EXISTS" : "TABLE"} ${table}\n\t${definitions.join(
+            ",\n\t",
+        )};\n`;
     },
     generateDropTableColumnScript: function(table, column) {
-        return `\nALTER ${global.config.options.schemaCompare.idempotentScript ? "TABLE IF EXISTS" : "TABLE"} ${table} DROP ${
-            global.config.options.schemaCompare.idempotentScript ? "COLUMN IF EXISTS" : "COLUMN"
+        return `\nALTER ${memory.config.options.schemaCompare.idempotentScript ? "TABLE IF EXISTS" : "TABLE"} ${table} DROP ${
+            memory.config.options.schemaCompare.idempotentScript ? "COLUMN IF EXISTS" : "COLUMN"
         } ${column} CASCADE;${hints.dropColumn}\n`;
     },
     generateAddTableConstraintScript: function(table, constraint, schema) {
         return `\nALTER ${
-            global.config.options.schemaCompare.idempotentScript ? "TABLE IF EXISTS" : "TABLE"
+            memory.config.options.schemaCompare.idempotentScript ? "TABLE IF EXISTS" : "TABLE"
         } ${table} ADD CONSTRAINT ${constraint} ${schema.definition};\n`;
     },
     generateDropTableConstraintScript: function(table, constraint) {
-        return `\nALTER ${global.config.options.schemaCompare.idempotentScript ? "TABLE IF EXISTS" : "TABLE"} ${table} DROP ${
-            global.config.options.schemaCompare.idempotentScript ? "CONSTRAINT IF EXISTS" : "CONSTRAINT"
+        return `\nALTER ${memory.config.options.schemaCompare.idempotentScript ? "TABLE IF EXISTS" : "TABLE"} ${table} DROP ${
+            memory.config.options.schemaCompare.idempotentScript ? "CONSTRAINT IF EXISTS" : "CONSTRAINT"
         } ${constraint};\n`;
     },
     generateChangeTableOptionsScript: function(table, options) {
-        return `\nALTER ${global.config.options.schemaCompare.idempotentScript ? "TABLE IF EXISTS" : "TABLE"} ${table} SET ${
+        return `\nALTER ${memory.config.options.schemaCompare.idempotentScript ? "TABLE IF EXISTS" : "TABLE"} ${table} SET ${
             options.withOids ? "WITH" : "WITHOUT"
         } OIDS;\n`;
     },
     generateChangeIndexScript: function(index, definition) {
-        return `\nDROP ${global.config.options.schemaCompare.idempotentScript ? "INDEX IF EXISTS" : "INDEX"} ${index};\n${definition};\n`;
+        return `\nDROP ${memory.config.options.schemaCompare.idempotentScript ? "INDEX IF EXISTS" : "INDEX"} ${index};\n${definition};\n`;
     },
     generateDropIndexScript: function(index) {
-        return `\nDROP ${global.config.options.schemaCompare.idempotentScript ? "INDEX IF EXISTS" : "INDEX"} ${index};\n`;
+        return `\nDROP ${memory.config.options.schemaCompare.idempotentScript ? "INDEX IF EXISTS" : "INDEX"} ${index};\n`;
     },
     generateTableRoleGrantsScript: function(table, role, privileges) {
         return `\n${this.__generateTableGrantsDefinition(table, role, privileges).join("\n")}\n`;
     },
     generateChangesTableRoleGrantsScript: function(table, role, changes) {
         let privileges = [];
-        if (global.checkGrants) {
+        if (memory.checkGrants) {
             if (changes.hasOwnProperty("select"))
                 privileges.push(
                     `${changes.select ? "GRANT" : "REVOKE"} SELECT ON TABLE ${table} ${changes.select ? "TO" : "FROM"} ${role};${
@@ -245,41 +242,43 @@ const helper = {
         return `\n${privileges.join("\n")}\n`;
     },
     generateChangeTableOwnerScript: function(table, owner) {
-        if (global.checkGrants) {
-            return `\nALTER ${global.config.options.schemaCompare.idempotentScript ? "TABLE IF EXISTS" : "TABLE"} ${table} OWNER TO ${owner};\n`;
+        if (memory.checkGrants) {
+            return `\nALTER ${memory.config.options.schemaCompare.idempotentScript ? "TABLE IF EXISTS" : "TABLE"} ${table} OWNER TO ${owner};\n`;
         }
         return '';
     },
     generateCreateViewScript: function(view, schema) {
         //Generate privileges script
         let privileges = [];
-        if (global.checkGrants) {
+        if (memory.checkGrants) {
             privileges.push(
-                `ALTER ${global.config.options.schemaCompare.idempotentScript ? "VIEW IF EXISTS" : "VIEW"} ${view} OWNER TO ${schema.owner};`,
+                `ALTER ${memory.config.options.schemaCompare.idempotentScript ? "VIEW IF EXISTS" : "VIEW"} ${view} OWNER TO ${schema.owner};`,
             );
             for (let role in schema.privileges) {
                 privileges = privileges.concat(this.__generateTableGrantsDefinition(view, role, schema.privileges[role]));
             }
         }
-        return `\nCREATE ${global.config.options.schemaCompare.idempotentScript ? "OR REPLACE VIEW" : "VIEW"} ${view} AS ${
+        return `\nCREATE ${memory.config.options.schemaCompare.idempotentScript ? "OR REPLACE VIEW" : "VIEW"} ${view} AS ${
             schema.definition
         }\n${privileges.join("\n")}\n`;
     },
     generateDropViewScript: function(view) {
-        return `\nDROP ${global.config.options.schemaCompare.idempotentScript ? "VIEW IF EXISTS" : "VIEW"} ${view};`;
+        return `\nDROP ${memory.config.options.schemaCompare.idempotentScript ? "VIEW IF EXISTS" : "VIEW"} ${view};`;
     },
     generateCreateMaterializedViewScript: function(view, schema) {
         //Generate indexes script
         let indexes = [];
         for (let index in schema.indexes) {
-            indexes.push(`\n${schema.indexes[index].definition};\n`);
+            if (schema.indexes.hasOwnProperty(index)) {
+                indexes.push(`\n${schema.indexes[index].definition};\n`);
+            }
         }
 
         //Generate privileges script
         let privileges = [];
-        if (global.checkGrants) {
+        if (memory.checkGrants) {
             privileges.push(
-                `ALTER ${global.config.options.schemaCompare.idempotentScript ? "MATERIALIZED VIEW IF EXISTS" : "MATERIALIZED VIEW"} ${view} OWNER TO ${
+                `ALTER ${memory.config.options.schemaCompare.idempotentScript ? "MATERIALIZED VIEW IF EXISTS" : "MATERIALIZED VIEW"} ${view} OWNER TO ${
                     schema.owner
                 };\n`,
             );
@@ -288,16 +287,16 @@ const helper = {
             }
         }
         return `\nCREATE ${
-            global.config.options.schemaCompare.idempotentScript ? "MATERIALIZED VIEW IF NOT EXISTS" : "MATERIALIZED VIEW"
+            memory.config.options.schemaCompare.idempotentScript ? "MATERIALIZED VIEW IF NOT EXISTS" : "MATERIALIZED VIEW"
         } ${view} AS ${schema.definition}\n${indexes.join("\n")}\n${privileges.join("\n")}\n`;
     },
     generateDropMaterializedViewScript: function(view) {
-        return `\nDROP ${global.config.options.schemaCompare.idempotentScript ? "MATERIALIZED VIEW IF EXISTS" : "MATERIALIZED VIEW"} ${view};`;
+        return `\nDROP ${memory.config.options.schemaCompare.idempotentScript ? "MATERIALIZED VIEW IF EXISTS" : "MATERIALIZED VIEW"} ${view};`;
     },
     generateCreateProcedureScript: function(procedure, schema) {
         //Generate privileges script
         let privileges = [];
-        if (global.checkGrants) {
+        if (memory.checkGrants) {
             privileges.push(`ALTER FUNCTION ${procedure}(${schema.argTypes}) OWNER TO ${schema.owner};`);
             for (let role in schema.privileges) {
                 privileges = privileges.concat(this.__generateProcedureGrantsDefinition(procedure, schema.argTypes, role, schema.privileges[role]));
@@ -306,19 +305,19 @@ const helper = {
         return `\n${schema.definition};\n${privileges.join("\n")}\n`;
     },
     generateChangeProcedureScript: function(procedure, schema) {
-        return `\nDROP ${global.config.options.schemaCompare.idempotentScript ? "FUNCTION IF EXISTS" : "FUNCTION"} ${procedure}(${
+        return `\nDROP ${memory.config.options.schemaCompare.idempotentScript ? "FUNCTION IF EXISTS" : "FUNCTION"} ${procedure}(${
             schema.argTypes
         });\n${this.generateCreateProcedureScript(procedure, schema)}`;
     },
     generateDropProcedureScript: function(procedure) {
-        return `\nDROP ${global.config.options.schemaCompare.idempotentScript ? "FUNCTION IF EXISTS" : "FUNCTION"} ${procedure};\n`;
+        return `\nDROP ${memory.config.options.schemaCompare.idempotentScript ? "FUNCTION IF EXISTS" : "FUNCTION"} ${procedure};\n`;
     },
     generateProcedureRoleGrantsScript: function(procedure, argTypes, role, privileges) {
         return `\n${this.__generateProcedureGrantsDefinition(procedure, argTypes, role, privileges).join("\n")}`;
     },
     generateChangesProcedureRoleGrantsScript: function(procedure, argTypes, role, changes) {
         let privileges = [];
-        if (global.checkGrants) {
+        if (memory.checkGrants) {
             if (changes.hasOwnProperty("execute"))
                 privileges.push(
                     `${changes.execute ? "GRANT" : "REVOKE"} EXECUTE ON FUNCTION ${procedure}(${argTypes}) ${changes.execute ? "TO" : "FROM"} ${role};${
@@ -329,7 +328,7 @@ const helper = {
         return `\n${privileges.join("\n")}`;
     },
     generateChangeProcedureOwnerScript: function(procedure, argTypes, owner) {
-        if (global.checkGrants) {
+        if (memory.checkGrants) {
             return `\nALTER FUNCTION ${procedure}(${argTypes}) OWNER TO ${owner};`;
         }
         return '';
@@ -379,13 +378,13 @@ const helper = {
         let dataTypeName = "";
         let dataTypeCategory = "X";
 
-        let dataTypeIndex = global.dataTypes.findIndex(dataType => {
+        let dataTypeIndex = memory.sourceDataTypes.findIndex(dataType => {
             return dataType.oid === dataTypeId;
         });
 
         if (dataTypeIndex >= 0) {
-            dataTypeName = global.dataTypes[dataTypeIndex].typname;
-            dataTypeCategory = global.dataTypes[dataTypeIndex].typcategory;
+            dataTypeName = memory.sourceDataTypes[dataTypeIndex].typname;
+            dataTypeCategory = memory.sourceDataTypes[dataTypeIndex].typcategory;
         }
 
         switch (dataTypeCategory) {
@@ -470,7 +469,7 @@ const helper = {
                 definition = `${value ? "" : "NO"} CYCLE`;
                 break;
             case "owner":
-                if (global.checkGrants) {
+                if (memory.checkGrants) {
                     definition = `OWNER TO ${value}`;
                 } else {
                     skip = true;
@@ -481,13 +480,13 @@ const helper = {
             return '';
         } else {
             return `\nALTER ${
-                global.config.options.schemaCompare.idempotentScript ? "SEQUENCE IF EXISTS" : "SEQUENCE"
+                memory.config.options.schemaCompare.idempotentScript ? "SEQUENCE IF EXISTS" : "SEQUENCE"
             } ${sequence} ${definition};\n`;
         }
     },
     generateChangesSequenceRoleGrantsScript: function(sequence, role, changes) {
         let privileges = [];
-        if (global.checkGrants) {
+        if (memory.checkGrants) {
             if (changes.hasOwnProperty("select"))
                 privileges.push(
                     `${changes.select ? "GRANT" : "REVOKE"} SELECT ON SEQUENCE ${sequence} ${changes.select ? "TO" : "FROM"} ${role};${
@@ -517,14 +516,14 @@ const helper = {
     generateCreateSequenceScript: function(sequence, schema) {
         //Generate privileges script
         let privileges = [];
-        if (global.checkGrants) {
+        if (memory.checkGrants) {
             privileges.push(`ALTER SEQUENCE ${sequence} OWNER TO ${schema.owner};`);
             for (let role in schema.privileges) {
                 privileges = privileges.concat(this.__generateSequenceGrantsDefinition(sequence, role, schema.privileges[role]));
             }
         }
         return `\n
-CREATE ${global.config.options.schemaCompare.idempotentScript ? "SEQUENCE IF NOT EXISTS" : "SEQUENCE"} ${sequence} 
+CREATE ${memory.config.options.schemaCompare.idempotentScript ? "SEQUENCE IF NOT EXISTS" : "SEQUENCE"} ${sequence} 
 \tINCREMENT BY ${schema.increment} 
 \tMINVALUE ${schema.minValue}
 \tMAXVALUE ${schema.maxValue}
@@ -535,9 +534,8 @@ CREATE ${global.config.options.schemaCompare.idempotentScript ? "SEQUENCE IF NOT
     },
     generateRenameSequenceScript: function(old_name, new_name) {
         return `\nALTER ${
-            global.config.options.schemaCompare.idempotentScript ? "SEQUENCE IF EXISTS" : "SEQUENCE"
+            memory.config.options.schemaCompare.idempotentScript ? "SEQUENCE IF EXISTS" : "SEQUENCE"
         } ${old_name} RENAME TO ${new_name};\n`;
     },
 };
 
-module.exports = helper;

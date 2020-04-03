@@ -2,6 +2,7 @@ const sql = require("./sqlScriptGenerator");
 const { Progress } = require("clui");
 const chalk = require("chalk");
 const deepEqual = require("deep-equal");
+const memory = require("./memory");
 
 var helper = {
     __finalScripts: [],
@@ -27,32 +28,34 @@ var helper = {
         const progressBarStep = 1.0 / Object.keys(tables).length;
 
         for (let table in tables) {
-            let tableName = `"${tables[table].schema || "public"}"."${table}"`;
-            this.__updateProgressbar(this.__progressBarValue, `Comparing table ${tableName} records`);
-            this.__tempScripts = [];
-            this.__isSequenceRebaseNeeded = false;
+            if (tables.hasOwnProperty(table)) {
+                let tableName = `"${tables[table].schema || "public"}"."${table}"`;
+                this.__updateProgressbar(this.__progressBarValue, `Comparing table ${tableName} records`);
+                this.__tempScripts = [];
+                this.__isSequenceRebaseNeeded = false;
 
-            if (!sourceTablesRecords[table] || !sourceTablesRecords[table].exists) {
-                this.__tempScripts.push(`\n--ERROR: Table ${tableName} not found on SOURCE database for comparison!\n`);
-            } else {
-                if (!targetTablesRecords[table] || !targetTablesRecords[table].exists)
-                    this.__tempScripts.push(`\n--ERROR: Table ${tableName} not found on TARGET database for comparison!\n`);
+                if (!sourceTablesRecords[table] || !sourceTablesRecords[table].exists) {
+                    this.__tempScripts.push(`\n--ERROR: Table ${tableName} not found on SOURCE database for comparison!\n`);
+                } else {
+                    if (!targetTablesRecords[table] || !targetTablesRecords[table].exists)
+                        this.__tempScripts.push(`\n--ERROR: Table ${tableName} not found on TARGET database for comparison!\n`);
 
-                //Check if at least one sequence is for an ALWAYS IDENTITY in case the OVERRIDING SYSTEM VALUE must be issued
-                let isIdentityUserValuesAllowed = this.__checkIdentityAllowUserValues(targetTablesRecords[table].sequences);
-                this.__compareTableRecords(
-                    tableName,
-                    tables[table].keyFields,
-                    sourceTablesRecords[table],
-                    targetTablesRecords[table],
-                    isIdentityUserValuesAllowed,
-                );
-                //Reset sequences to avoid PKEY or UNIQUE CONSTRAINTS conflicts
-                if (this.__isSequenceRebaseNeeded) this.__rebaseSequences(tableName, sourceTablesRecords[table].sequences);
+                    //Check if at least one sequence is for an ALWAYS IDENTITY in case the OVERRIDING SYSTEM VALUE must be issued
+                    let isIdentityUserValuesAllowed = this.__checkIdentityAllowUserValues(targetTablesRecords[table].sequences);
+                    this.__compareTableRecords(
+                        tableName,
+                        tables[table].keyFields,
+                        sourceTablesRecords[table],
+                        targetTablesRecords[table],
+                        isIdentityUserValuesAllowed,
+                    );
+                    //Reset sequences to avoid PKEY or UNIQUE CONSTRAINTS conflicts
+                    if (this.__isSequenceRebaseNeeded) this.__rebaseSequences(tableName, sourceTablesRecords[table].sequences);
+                }
+
+                this.__appendScripts(`SYNCHRONIZE TABLE ${tableName} RECORDS`);
+                this.__progressBarValue += progressBarStep;
             }
-
-            this.__appendScripts(`SYNCHRONIZE TABLE ${tableName} RECORDS`);
-            this.__progressBarValue += progressBarStep;
         }
 
         this.__updateProgressbar(1.0, "Tables records compared!");
@@ -139,13 +142,14 @@ var helper = {
     __compareTableRecordFields: function(table, keyFieldsMap, fields, sourceRecord, targetRecord) {
         let changes = {};
 
-        for (field in sourceRecord) {
-            if (field === "rowHash") continue;
-
-            if (targetRecord[field] === undefined && this.__checkIsNewColumn(table, field)) {
-                changes[field] = sourceRecord[field];
-            } else if (this.__compareFieldValues(sourceRecord[field], targetRecord[field])) {
-                changes[field] = sourceRecord[field];
+        for (let field in sourceRecord) {
+            if (sourceRecord.hasOwnProperty(field)) {
+                if (field === "rowHash") continue;
+                if (targetRecord[field] === undefined && this.__checkIsNewColumn(table, field)) {
+                    changes[field] = sourceRecord[field];
+                } else if (this.__compareFieldValues(sourceRecord[field], targetRecord[field])) {
+                    changes[field] = sourceRecord[field];
+                }
             }
         }
 
@@ -156,19 +160,19 @@ var helper = {
     },
     __checkIsNewColumn: function(table, field) {
         if (
-            global.schemaChanges.newColumns[table] &&
-            global.schemaChanges.newColumns[table].some(column => {
-                return column == `"${field}"`;
+            memory.schemaChanges.newColumns[table] &&
+            memory.schemaChanges.newColumns[table].some(column => {
+                return column === `"${field}"`;
             })
         )
             return true;
         else return false;
     },
     __compareFieldValues: function(sourceValue, targetValue) {
-        var sourceValueType = typeof sourceValue;
-        var targetValueType = typeof targetValue;
+        let sourceValueType = typeof sourceValue;
+        let targetValueType = typeof targetValue;
 
-        if (sourceValueType != targetValueType) return false;
+        if (sourceValueType !== targetValueType) return false;
         //else if (sourceValueType === "string") sourceValue.replace(/[\r\n]/g, "") !== targetValue.replace(/[\r\n]/g, "");
         else if (sourceValue instanceof Date) return sourceValue.getTime() !== targetValue.getTime();
         else if (sourceValue instanceof Object) return !deepEqual(sourceValue, targetValue);

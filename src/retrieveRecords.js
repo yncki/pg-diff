@@ -1,6 +1,7 @@
 const Exception = require("./error");
 const { Progress } = require("clui");
 const chalk = require("chalk");
+const memory = require("./memory");
 
 var helper = {
     __progressBar: new Progress(20),

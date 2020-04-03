@@ -1,8 +1,10 @@
 const sql = require('./sqlScriptGenerator');
+
 const {
     Progress
 } = require('clui');
 const chalk = require('chalk');
+const memory = require("./memory");
 
 const helper = {
     __finalScripts: [],
@@ -14,6 +16,9 @@ const helper = {
     __progressBarValue: 0.0,
     __sourceSchema: {},
     __targetSchema: {},
+    __finalScriptsGrouped: {
+        indexes: [],
+    },
     __updateProgressbar: function (value, label) {
         this.__progressBarValue = value;
         process.stdout.clearLine();
@@ -48,7 +53,7 @@ const helper = {
         this.__updateProgressbar(this.__progressBarValue + 0.0001, 'Comparing tables');
         let tablesToCompareLength = Object.keys(this.__sourceSchema.tables).length;
 
-        if (global.config.options.schemaCompare.dropMissingTable) {
+        if (memory.config.options.schemaCompare.dropMissingTable) {
             tablesToCompareLength += Object.keys(this.__targetSchema.tables).length;
         }
 
@@ -82,7 +87,7 @@ const helper = {
             }
         }
 
-        if (global.config.options.schemaCompare.dropMissingTable)
+        if (memory.config.options.schemaCompare.dropMissingTable)
             for (let table in this.__targetSchema.tables) { //Get missing tables
                 if (this.__targetSchema.tables.hasOwnProperty(table)) {
                     this.__updateProgressbar(this.__progressBarValue + progressBarStep, `Comparing TARGET TABLE ${table}`);
@@ -106,10 +111,10 @@ const helper = {
                     this.__compareTableColumn(table, column, sourceTableColumns[column], targetTableColumns[column], targetTableConstraints, targetTableIndexes);
                 } else { //Table column not exists on target database, then generate script to add column
                     this.__tempScripts.push(sql.generateAddTableColumnScript(table, column, sourceTableColumns[column]));
-                    if (!global.schemaChanges.newColumns[table])
-                        global.schemaChanges.newColumns[table] = [];
+                    if (!memory.schemaChanges.newColumns[table])
+                        memory.schemaChanges.newColumns[table] = [];
 
-                    global.schemaChanges.newColumns[table].push(column);
+                    memory.schemaChanges.newColumns[table].push(column);
                 }
             }
         }
@@ -239,22 +244,30 @@ const helper = {
             if (sourceTableIndexes.hasOwnProperty(index)) {
                 if (targetTableIndexes[index]) { //Table index exists on both database, then compare index definition
                     if (sourceTableIndexes[index].definition !== targetTableIndexes[index].definition) {
-                        if (!this.__droppedIndexes.includes(index))
+                        if (!this.__droppedIndexes.includes(index)) {
                             this.__tempScripts.push(sql.generateDropIndexScript(index));
+                        }
                         this.__tempScripts.push(`\n${sourceTableIndexes[index].definition};\n`);
                     } else {
-                        if (this.__droppedIndexes.includes(index)) //It will recreate a dropped index because changes happens on involved columns
+                        if (this.__droppedIndexes.includes(index)) { //It will recreate a dropped index because changes happens on involved columns
                             this.__tempScripts.push(`\n${sourceTableIndexes[index].definition};\n`);
+                        }
                     }
                 } else { //Table index not exists on target database, then generate script to add index
+
+                    //this.__finalScriptsGrouped.indexes.push(`${sourceTableIndexes[index].definition};`);
+
                     this.__tempScripts.push(`\n${sourceTableIndexes[index].definition};\n`);
                 }
             }
         }
         for (let index in targetTableIndexes) { //Get dropped indexes
             if (targetTableIndexes.hasOwnProperty(index)) {
-                if (!sourceTableIndexes[index] && !this.__droppedIndexes.includes(index)) //Table index not exists on source, then generate script to drop index
-                    this.__tempScripts.push(sql.generateDropIndexScript(index))
+                if (!sourceTableIndexes[index] && !this.__droppedIndexes.includes(index)) { //Table index not exists on source, then generate script to drop index
+
+                    this.__tempScripts.push(sql.generateDropIndexScript(index));
+
+                }
             }
         }
     },
@@ -297,7 +310,7 @@ const helper = {
         this.__updateProgressbar(this.__progressBarValue + 0.0001, 'Comparing views');
         let viewsToCompareLength = Object.keys(this.__sourceSchema.views).length;
 
-        if (global.config.options.schemaCompare.dropMissingView)
+        if (memory.config.options.schemaCompare.dropMissingView)
             viewsToCompareLength += Object.keys(this.__targetSchema.views).length;
 
         const progressBarStep = 0.1665 / viewsToCompareLength;
@@ -333,7 +346,7 @@ const helper = {
             }
         }
 
-        if (global.config.options.schemaCompare.dropMissingView)
+        if (memory.config.options.schemaCompare.dropMissingView)
             for (let view in this.__targetSchema.views) { //Get missing views
                 if (this.__targetSchema.views.hasOwnProperty(view)) {
                     this.__updateProgressbar(this.__progressBarValue + progressBarStep, `Comparing TARGET VIEW ${view}`);
@@ -350,7 +363,7 @@ const helper = {
         this.__updateProgressbar(this.__progressBarValue + 0.0001, 'Comparing materialized views');
         let mviewsToCompareLength = Object.keys(this.__sourceSchema.materializedViews).length;
 
-        if (global.config.options.schemaCompare.dropMissingView)
+        if (memory.config.options.schemaCompare.dropMissingView)
             mviewsToCompareLength += Object.keys(this.__targetSchema.materializedViews).length;
 
         const progressBarStep = 0.1665 / mviewsToCompareLength;
@@ -387,7 +400,7 @@ const helper = {
             }
         }
 
-        if (global.config.options.schemaCompare.dropMissingView)
+        if (memory.config.options.schemaCompare.dropMissingView)
             for (let view in this.__targetSchema.materializedViews) { //Get missing materialized views
                 if (this.__targetSchema.materializedViews.hasOwnProperty(view)) {
                     this.__updateProgressbar(this.__progressBarValue + progressBarStep, `Comparing TARGET MATERIALIZED VIEW ${view}`);
@@ -404,7 +417,7 @@ const helper = {
         this.__updateProgressbar(this.__progressBarValue + 0.0001, 'Comparing functions');
         let proceduresToCompareLength = Object.keys(this.__sourceSchema.functions).length;
 
-        if (global.config.options.schemaCompare.dropMissingFunction)
+        if (memory.config.options.schemaCompare.dropMissingFunction)
             proceduresToCompareLength += Object.keys(this.__targetSchema.functions).length;
 
         const progressBarStep = 0.1665 / proceduresToCompareLength;
@@ -434,7 +447,7 @@ const helper = {
             this.__appendScripts(`${actionLabel} FUNCTION ${procedure}`);
         }
 
-        if (global.config.options.schemaCompare.dropMissingFunction)
+        if (memory.config.options.schemaCompare.dropMissingFunction)
             for (let procedure in this.__targetSchema.functions) { //Get missing functions
                 this.__updateProgressbar(this.__progressBarValue + progressBarStep, `Comparing TARGET FUNCTION ${procedure}`);
                 this.__tempScripts = [];
@@ -553,7 +566,7 @@ const helper = {
         this.__compareSequences();
 
         this.__updateProgressbar(1.0, 'Database objects compared!');
-
+        //dane.push("x");
         return this.__finalScripts;
     }
 };
