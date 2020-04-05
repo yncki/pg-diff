@@ -25,11 +25,14 @@ const helper = {
         process.stdout.cursorTo(0);
         process.stdout.write(this.__progressBar.update(this.__progressBarValue) + ' - ' + chalk.whiteBright(label));
     },
-    __appendScripts: function (actionLabel) {
+    __appendScriptsFromTempToFinal: function (actionLabel) {
         if (this.__tempScripts.length > 0) {
-            this.__finalScripts.push(`\n--- BEGIN ${actionLabel} ---\n`);
-            this.__finalScripts = this.__finalScripts.concat(this.__tempScripts);
-            this.__finalScripts.push(`\n--- END ${actionLabel} ---\n`);
+            let concatString = this.__finalScripts.concat(this.__tempScripts);
+            if (concatString.length > 5) { //\n\n
+                this.__finalScripts.push(`\n--- BEGIN ${actionLabel} ---\n`);
+                this.__finalScripts = this.__finalScripts.concat(this.__tempScripts);
+                this.__finalScripts.push(`\n--- END ${actionLabel} ---\n`);
+            }
         }
     },
     __compareSchemas: function () {
@@ -42,10 +45,11 @@ const helper = {
                 this.__tempScripts = [];
 
                 if (!this.__targetSchema.schemas[schemaName]) { //Schema not exists on target database, then generate script to create schema
-                    this.__tempScripts.push(sql.generateCreateSchemaScript(schemaName, this.__sourceSchema.schemas[schemaName].owner));
+                    let script = sql.generateCreateSchemaScript(schemaName, this.__sourceSchema.schemas[schemaName].owner);
+                    this.__tempScripts.push(`\n${script}\n`);
                 }
 
-                this.__appendScripts(`CREATE SCHEMA ${schemaName}`);
+                this.__appendScriptsFromTempToFinal(`CREATE SCHEMA ${schemaName}`);
             }
         }
     },
@@ -73,7 +77,7 @@ const helper = {
                     this.__compareTableOptions(table, this.__sourceSchema.tables[table].options, this.__targetSchema.tables[table].options);
                     this.__compareTableColumns(table, this.__sourceSchema.tables[table].columns, this.__targetSchema.tables[table].columns, this.__targetSchema.tables[table].constraints, this.__targetSchema.tables[table].indexes);
                     this.__compareTableConstraints(table, this.__sourceSchema.tables[table].constraints, this.__targetSchema.tables[table].constraints);
-                    this.__compareTableIndexes(this.__sourceSchema.tables[table].indexes, this.__targetSchema.tables[table].indexes);
+                    this.__compareTableIndexes(this.__sourceSchema.tables[table].indexes, this.__targetSchema.tables[table].indexes,table);
                     this.__compareTablePrivileges(table, this.__sourceSchema.tables[table].privileges, this.__targetSchema.tables[table].privileges);
                     if (this.__sourceSchema.tables[table].owner !== this.__targetSchema.tables[table].owner)
                         this.__tempScripts.push(sql.generateChangeTableOwnerScript(table, this.__sourceSchema.tables[table].owner));
@@ -83,7 +87,7 @@ const helper = {
                     this.__tempScripts.push(sql.generateCreateTableScript(table, this.__sourceSchema.tables[table]));
                 }
 
-                this.__appendScripts(`${actionLabel} TABLE ${table}`);
+                this.__appendScriptsFromTempToFinal(`${actionLabel} TABLE ${table}`);
             }
         }
 
@@ -93,10 +97,12 @@ const helper = {
                     this.__updateProgressbar(this.__progressBarValue + progressBarStep, `Comparing TARGET TABLE ${table}`);
                     this.__tempScripts = [];
 
-                    if (!this.__sourceSchema.tables.hasOwnProperty(table))
-                        this.__tempScripts.push(sql.generateDropTableScript(table));
+                    if (!this.__sourceSchema.tables.hasOwnProperty(table)) {
+                        let script = sql.generateDropTableScript(table);
+                        this.__tempScripts.push(`\n${script}\n`);
+                    }
 
-                    this.__appendScripts(`DROP TABLE ${table}`);
+                    this.__appendScriptsFromTempToFinal(`DROP TABLE ${table}`);
                 }
             }
     },
@@ -180,7 +186,7 @@ const helper = {
                     if (indexDefinition.includes(`${rawColumnName},`, searchStartingIndex) ||
                         indexDefinition.includes(`${rawColumnName})`, searchStartingIndex) ||
                         indexDefinition.includes(`${column}`, searchStartingIndex)) {
-                        this.__tempScripts.push(sql.generateDropIndexScript(index));
+                        this.__tempScripts.push(sql.generateDropIndexScript(table,index));
                         this.__droppedIndexes.push(index);
                     }
                 }
@@ -239,13 +245,13 @@ const helper = {
             }
         }
     },
-    __compareTableIndexes: function (sourceTableIndexes, targetTableIndexes) {
+    __compareTableIndexes: function (sourceTableIndexes, targetTableIndexes,name) {
         for (let index in sourceTableIndexes) { //Get new or changed indexes
             if (sourceTableIndexes.hasOwnProperty(index)) {
                 if (targetTableIndexes[index]) { //Table index exists on both database, then compare index definition
                     if (sourceTableIndexes[index].definition !== targetTableIndexes[index].definition) {
                         if (!this.__droppedIndexes.includes(index)) {
-                            this.__tempScripts.push(sql.generateDropIndexScript(index));
+                            this.__tempScripts.push(sql.generateDropIndexScript(name,index));
                         }
                         this.__tempScripts.push(`\n${sourceTableIndexes[index].definition};\n`);
                     } else {
@@ -265,7 +271,7 @@ const helper = {
             if (targetTableIndexes.hasOwnProperty(index)) {
                 if (!sourceTableIndexes[index] && !this.__droppedIndexes.includes(index)) { //Table index not exists on source, then generate script to drop index
 
-                    this.__tempScripts.push(sql.generateDropIndexScript(index));
+                    this.__tempScripts.push(sql.generateDropIndexScript(name,index));
 
                 }
             }
@@ -342,7 +348,7 @@ const helper = {
                     this.__tempScripts.push(sql.generateCreateViewScript(view, this.__sourceSchema.views[view]));
                 }
 
-                this.__appendScripts(`${actionLabel} VIEW ${view}`);
+                this.__appendScriptsFromTempToFinal(`${actionLabel} VIEW ${view}`);
             }
         }
 
@@ -355,7 +361,7 @@ const helper = {
                     if (!this.__sourceSchema.views.hasOwnProperty(view))
                         this.__tempScripts.push(sql.generateDropViewScript(view));
 
-                    this.__appendScripts(`DROP VIEW ${view}`);
+                    this.__appendScriptsFromTempToFinal(`DROP VIEW ${view}`);
                 }
             }
     },
@@ -385,7 +391,7 @@ const helper = {
                         if (this.__droppedViews.includes(view)) //It will recreate a dropped materialized view because changes happens on involved columns
                             this.__tempScripts.push(sql.generateCreateMaterializedViewScript(view, this.__sourceSchema.views[view]));
 
-                        this.__compareTableIndexes(this.__sourceSchema.materializedViews[view].indexes, this.__targetSchema.materializedViews[view].indexes);
+                        this.__compareTableIndexes(this.__sourceSchema.materializedViews[view].indexes, this.__targetSchema.materializedViews[view].indexes,view);
                         this.__compareTablePrivileges(view, this.__sourceSchema.materializedViews[view].privileges, this.__targetSchema.materializedViews[view].privileges);
                         if (this.__sourceSchema.materializedViews[view].owner !== this.__targetSchema.materializedViews[view].owner)
                             this.__tempScripts.push(sql.generateChangeTableOwnerScript(view, this.__sourceSchema.materializedViews[view].owner));
@@ -396,7 +402,7 @@ const helper = {
                     this.__tempScripts.push(sql.generateCreateMaterializedViewScript(view, this.__sourceSchema.materializedViews[view]));
                 }
 
-                this.__appendScripts(`${actionLabel} MATERIALIZED VIEW ${view}`);
+                this.__appendScriptsFromTempToFinal(`${actionLabel} MATERIALIZED VIEW ${view}`);
             }
         }
 
@@ -409,7 +415,7 @@ const helper = {
                     if (!this.__sourceSchema.materializedViews.hasOwnProperty(view))
                         this.__tempScripts.push(sql.generateDropMaterializedViewScript(view));
 
-                    this.__appendScripts(`DROP MATERIALIZED VIEW ${view}`);
+                    this.__appendScriptsFromTempToFinal(`DROP MATERIALIZED VIEW ${view}`);
                 }
             }
     },
@@ -444,7 +450,7 @@ const helper = {
                 this.__tempScripts.push(sql.generateCreateProcedureScript(procedure, this.__sourceSchema.functions[procedure]));
             }
 
-            this.__appendScripts(`${actionLabel} FUNCTION ${procedure}`);
+            this.__appendScriptsFromTempToFinal(`${actionLabel} FUNCTION ${procedure}`);
         }
 
         if (memory.config.options.schemaCompare.dropMissingFunction)
@@ -455,7 +461,7 @@ const helper = {
                 if (!this.__sourceSchema.functions.hasOwnProperty(procedure))
                     this.__tempScripts.push(sql.generateDropProcedureScript(procedure));
 
-                this.__appendScripts(`DROP FUNCTION ${procedure}`);
+                this.__appendScriptsFromTempToFinal(`DROP FUNCTION ${procedure}`);
             }
     },
     __compareProcedurePrivileges: function (procedure, argTypes, sourceProcedurePrivileges, targetProcedurePrivileges) {
@@ -502,7 +508,7 @@ const helper = {
                     this.__tempScripts.push(sql.generateCreateSequenceScript(sequence, this.__sourceSchema.sequences[sequence]));
                 }
 
-                this.__appendScripts(`${actionLabel} SEQUENCE ${sequence}`);
+                this.__appendScriptsFromTempToFinal(`${actionLabel} SEQUENCE ${sequence}`);
             }
         }
     },
@@ -554,19 +560,15 @@ const helper = {
     },
     compareDatabaseObjects: function (sourceSchema, targetSchema) {
         this.__updateProgressbar(0.0, 'Comparing database objects ...');
-
         this.__sourceSchema = sourceSchema;
         this.__targetSchema = targetSchema;
-
         this.__compareSchemas();
         this.__compareTables();
         this.__compareViews();
         this.__compareMaterializedViews();
         this.__compareProcedures();
         this.__compareSequences();
-
         this.__updateProgressbar(1.0, 'Database objects compared!');
-        //dane.push("x");
         return this.__finalScripts;
     }
 };

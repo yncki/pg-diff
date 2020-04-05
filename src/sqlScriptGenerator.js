@@ -61,12 +61,12 @@ module.exports = {
         return definitions;
     },
     generateCreateSchemaScript: function(schema, owner) {
-        return `\nCREATE ${
+        return `CREATE ${
             memory.config.options.schemaCompare.idempotentScript ? "SCHEMA IF NOT EXISTS" : "SCHEMA"
-        } ${schema} AUTHORIZATION ${owner};\n`;
+        } ${schema} AUTHORIZATION ${owner};`;
     },
     generateDropTableScript: function(table) {
-        return `\nDROP ${memory.config.options.schemaCompare.idempotentScript ? "TABLE IF EXISTS" : "TABLE"} ${table};\n`;
+        return `DROP ${memory.config.options.schemaCompare.idempotentScript ? "TABLE IF EXISTS" : "TABLE"} ${table};`;
     },
     generateCreateTableScript: function(table, schema) {
         //Generate columns script
@@ -180,8 +180,8 @@ module.exports = {
     generateChangeIndexScript: function(index, definition) {
         return `\nDROP ${memory.config.options.schemaCompare.idempotentScript ? "INDEX IF EXISTS" : "INDEX"} ${index};\n${definition};\n`;
     },
-    generateDropIndexScript: function(index) {
-        return `\nDROP ${memory.config.options.schemaCompare.idempotentScript ? "INDEX IF EXISTS" : "INDEX"} ${index};\n`;
+    generateDropIndexScript: function(table,index) {
+        return `\nDROP ${memory.config.options.schemaCompare.idempotentScript ? "INDEX IF EXISTS" : "INDEX"} ${index}; ---@ ${table} --- \n`;
     },
     generateTableRoleGrantsScript: function(table, role, privileges) {
         return `\n${this.__generateTableGrantsDefinition(table, role, privileges).join("\n")}\n`;
