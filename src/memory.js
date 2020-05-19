@@ -2,7 +2,6 @@ let memory = {
     configName: "",
     scriptName:"",
     config: null,
-    checkGrants: false,
     replayMigration: false,
     schemaChanges: {
         newColumns: {},

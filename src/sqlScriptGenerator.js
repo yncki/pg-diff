@@ -31,7 +31,7 @@ module.exports = {
     },
     __generateTableGrantsDefinition: function(table, role, privileges) {
         let definitions = [];
-        if (memory.checkGrants) {
+        if (memory.config.options.schemaCompare.grants) {
             if (privileges.select) definitions.push(`GRANT SELECT ON TABLE ${table} TO ${role};${hints.potentialRoleMissing}`);
             if (privileges.insert) definitions.push(`GRANT INSERT ON TABLE ${table} TO ${role};${hints.potentialRoleMissing}`);
             if (privileges.update) definitions.push(`GRANT UPDATE ON TABLE ${table} TO ${role};${hints.potentialRoleMissing}`);
@@ -44,14 +44,14 @@ module.exports = {
     },
     __generateProcedureGrantsDefinition: function(procedure, argTypes, role, privileges) {
         let definitions = [];
-        if (memory.checkGrants) {
+        if (memory.config.options.schemaCompare.grants) {
             if (privileges.execute) definitions.push(`GRANT EXECUTE ON FUNCTION ${procedure}(${argTypes}) TO ${role};${hints.potentialRoleMissing}`);
         }
         return definitions;
     },
     __generateSequenceGrantsDefinition: function(sequence, role, privileges) {
         let definitions = [];
-        if (memory.checkGrants) {
+        if (memory.config.options.schemaCompare.grants) {
             if (privileges.select) definitions.push(`GRANT SELECT ON SEQUENCE ${sequence} TO ${role};${hints.potentialRoleMissing}`);
 
             if (privileges.usage) definitions.push(`GRANT USAGE ON SEQUENCE ${sequence} TO ${role};${hints.potentialRoleMissing}`);
@@ -87,21 +87,24 @@ module.exports = {
 
         //Generate indexes script
         let indexes = [];
-        for (let index in schema.indexes) {
-            if (schema.indexes.hasOwnProperty(index)) {
-                let definition = schema.indexes[index].definition;
-                if (memory.config.options.schemaCompare.idempotentScript) {
-                    definition = definition.replace("CREATE INDEX", "CREATE INDEX IF NOT EXISTS");
-                    definition = definition.replace("CREATE UNIQUE INDEX", "CREATE UNIQUE INDEX IF NOT EXISTS");
-                }
+        if (memory.config.options.schemaCompare.indexes) {
 
-                indexes.push(`\n${definition};\n`);
+            for (let index in schema.indexes) {
+                if (schema.indexes.hasOwnProperty(index)) {
+                    let definition = schema.indexes[index].definition;
+                    if (memory.config.options.schemaCompare.idempotentScript) {
+                        definition = definition.replace("CREATE INDEX", "CREATE INDEX IF NOT EXISTS");
+                        definition = definition.replace("CREATE UNIQUE INDEX", "CREATE UNIQUE INDEX IF NOT EXISTS");
+                    }
+
+                    indexes.push(`\n${definition};\n`);
+                }
             }
         }
 
         //Generate privileges script
         let privileges = [];
-        if (memory.checkGrants) {
+        if (memory.config.options.schemaCompare.grants) {
             privileges.push(
                 `ALTER ${memory.config.options.schemaCompare.idempotentScript ? "TABLE IF EXISTS" : "TABLE"} ${table} OWNER TO ${schema.owner};\n`,
             );
@@ -178,17 +181,27 @@ module.exports = {
         } OIDS;\n`;
     },
     generateChangeIndexScript: function(index, definition) {
-        return `\nDROP ${memory.config.options.schemaCompare.idempotentScript ? "INDEX IF EXISTS" : "INDEX"} ${index};\n${definition};\n`;
+        if (memory.config.options.schemaCompare.indexes) {
+
+            return `\nDROP ${memory.config.options.schemaCompare.idempotentScript ? "INDEX IF EXISTS" : "INDEX"} ${index};\n${definition};\n`;
+        } else {
+            return '\n';
+        }
     },
     generateDropIndexScript: function(table,index) {
-        return `\nDROP ${memory.config.options.schemaCompare.idempotentScript ? "INDEX IF EXISTS" : "INDEX"} ${index}; ---@ ${table} --- \n`;
+        if (memory.config.options.schemaCompare.indexes) {
+
+            return `\nDROP ${memory.config.options.schemaCompare.idempotentScript ? "INDEX IF EXISTS" : "INDEX"} ${index}; ---@ ${table} --- \n`;
+        } else {
+            return '\n';
+        }
     },
     generateTableRoleGrantsScript: function(table, role, privileges) {
         return `\n${this.__generateTableGrantsDefinition(table, role, privileges).join("\n")}\n`;
     },
     generateChangesTableRoleGrantsScript: function(table, role, changes) {
         let privileges = [];
-        if (memory.checkGrants) {
+        if (memory.config.options.schemaCompare.grants) {
             if (changes.hasOwnProperty("select"))
                 privileges.push(
                     `${changes.select ? "GRANT" : "REVOKE"} SELECT ON TABLE ${table} ${changes.select ? "TO" : "FROM"} ${role};${
@@ -242,7 +255,7 @@ module.exports = {
         return `\n${privileges.join("\n")}\n`;
     },
     generateChangeTableOwnerScript: function(table, owner) {
-        if (memory.checkGrants) {
+        if (memory.config.options.schemaCompare.grants) {
             return `\nALTER ${memory.config.options.schemaCompare.idempotentScript ? "TABLE IF EXISTS" : "TABLE"} ${table} OWNER TO ${owner};\n`;
         }
         return '';
@@ -250,7 +263,7 @@ module.exports = {
     generateCreateViewScript: function(view, schema) {
         //Generate privileges script
         let privileges = [];
-        if (memory.checkGrants) {
+        if (memory.config.options.schemaCompare.grants) {
             privileges.push(
                 `ALTER ${memory.config.options.schemaCompare.idempotentScript ? "VIEW IF EXISTS" : "VIEW"} ${view} OWNER TO ${schema.owner};`,
             );
@@ -267,16 +280,20 @@ module.exports = {
     },
     generateCreateMaterializedViewScript: function(view, schema) {
         //Generate indexes script
+
         let indexes = [];
-        for (let index in schema.indexes) {
-            if (schema.indexes.hasOwnProperty(index)) {
-                indexes.push(`\n${schema.indexes[index].definition};\n`);
+        if (memory.config.options.schemaCompare.indexes) {
+
+            for (let index in schema.indexes) {
+                if (schema.indexes.hasOwnProperty(index)) {
+                    indexes.push(`\n${schema.indexes[index].definition};\n`);
+                }
             }
         }
 
         //Generate privileges script
         let privileges = [];
-        if (memory.checkGrants) {
+        if (memory.config.options.schemaCompare.grants) {
             privileges.push(
                 `ALTER ${memory.config.options.schemaCompare.idempotentScript ? "MATERIALIZED VIEW IF EXISTS" : "MATERIALIZED VIEW"} ${view} OWNER TO ${
                     schema.owner
@@ -296,7 +313,7 @@ module.exports = {
     generateCreateProcedureScript: function(procedure, schema) {
         //Generate privileges script
         let privileges = [];
-        if (memory.checkGrants) {
+        if (memory.config.options.schemaCompare.grants) {
             privileges.push(`ALTER FUNCTION ${procedure}(${schema.argTypes}) OWNER TO ${schema.owner};`);
             for (let role in schema.privileges) {
                 privileges = privileges.concat(this.__generateProcedureGrantsDefinition(procedure, schema.argTypes, role, schema.privileges[role]));
@@ -317,7 +334,7 @@ module.exports = {
     },
     generateChangesProcedureRoleGrantsScript: function(procedure, argTypes, role, changes) {
         let privileges = [];
-        if (memory.checkGrants) {
+        if (memory.config.options.schemaCompare.grants) {
             if (changes.hasOwnProperty("execute"))
                 privileges.push(
                     `${changes.execute ? "GRANT" : "REVOKE"} EXECUTE ON FUNCTION ${procedure}(${argTypes}) ${changes.execute ? "TO" : "FROM"} ${role};${
@@ -328,7 +345,7 @@ module.exports = {
         return `\n${privileges.join("\n")}`;
     },
     generateChangeProcedureOwnerScript: function(procedure, argTypes, owner) {
-        if (memory.checkGrants) {
+        if (memory.config.options.schemaCompare.grants) {
             return `\nALTER FUNCTION ${procedure}(${argTypes}) OWNER TO ${owner};`;
         }
         return '';
@@ -447,8 +464,8 @@ module.exports = {
         return `\nSELECT setval(pg_get_serial_sequence('${tableName}', '${sequence.attname}'), max("${sequence.attname}"), true) FROM ${tableName};\n`;
     },
     generateChangeSequencePropertyScript(sequence, property, value) {
-        var definition = "";
-        var skip = false;
+        let definition = "";
+        let skip = false;
         switch (property) {
             case "startValue":
                 definition = `START WITH ${value}`;
@@ -469,7 +486,7 @@ module.exports = {
                 definition = `${value ? "" : "NO"} CYCLE`;
                 break;
             case "owner":
-                if (memory.checkGrants) {
+                if (memory.config.options.schemaCompare.grants) {
                     definition = `OWNER TO ${value}`;
                 } else {
                     skip = true;
@@ -486,7 +503,7 @@ module.exports = {
     },
     generateChangesSequenceRoleGrantsScript: function(sequence, role, changes) {
         let privileges = [];
-        if (memory.checkGrants) {
+        if (memory.config.options.schemaCompare.grants) {
             if (changes.hasOwnProperty("select"))
                 privileges.push(
                     `${changes.select ? "GRANT" : "REVOKE"} SELECT ON SEQUENCE ${sequence} ${changes.select ? "TO" : "FROM"} ${role};${
@@ -516,7 +533,7 @@ module.exports = {
     generateCreateSequenceScript: function(sequence, schema) {
         //Generate privileges script
         let privileges = [];
-        if (memory.checkGrants) {
+        if (memory.config.options.schemaCompare.grants) {
             privileges.push(`ALTER SEQUENCE ${sequence} OWNER TO ${schema.owner};`);
             for (let role in schema.privileges) {
                 privileges = privileges.concat(this.__generateSequenceGrantsDefinition(sequence, role, schema.privileges[role]));

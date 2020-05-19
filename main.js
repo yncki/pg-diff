@@ -38,7 +38,7 @@ function __printHelp() {
     /* log(chalk.green('-mu, --migrate-upto   \t\t') + chalk.blue('To run migration applying all patch files till the specified patch file.')); */
     log(chalk.green("-mr, --migrate-replay \t\t") + chalk.blue("To run migration applying all missing or failed or stuck patch files."));
     log(chalk.green("-s, --save            \t\t") + chalk.blue("To save\\register patch on migration history table without executing the script."));
-    log(chalk.green("-cg, --checkGrants    \t\t") + chalk.blue("Check grants"));
+   // log(chalk.green("-cg, --checkGrants    \t\t") + chalk.blue("Check grants"));
     log();
     log();
     log(chalk.gray(" TO COMPARE: ") + chalk.yellow("pg-diff ") + chalk.gray("-c ") + chalk.cyan("configuration-name script-name"));
@@ -98,7 +98,8 @@ function __printOptions() {
     log(chalk.yellow("     Schema Namespaces: ") + chalk.green(memory.config.options.schemaCompare.namespaces));
     log(chalk.yellow("     Idempotent Script: ") + chalk.green(memory.config.options.schemaCompare.idempotentScript ? "ENABLED" : "DISABLED"));
     log(chalk.yellow("          Data Compare: ") + chalk.green(memory.config.options.dataCompare.enable ? "ENABLED" : "DISABLED"));
-    log(chalk.yellow("          Check grants: ") + chalk.green(memory.checkGrants ? "ENABLED" : "DISABLED"));
+    log(chalk.yellow("        Compare grants: ") + chalk.green(memory.config.options.schemaCompare.grants ? "ENABLED" : "DISABLED"));
+    log(chalk.yellow("       Compare indexes: ") + chalk.green(memory.config.options.schemaCompare.indexes ? "ENABLED" : "DISABLED"));
     log();
 }
 
@@ -115,11 +116,12 @@ async function __readArguments() {
         case "--help": {
             __printHelp();
             process.exit();
-        }
-        case "-cg":
-        case "-checkGrants":
-            memory.checkGrants = true;
             break;
+        }
+        //case "-cg":
+        // case "-checkGrants":
+        //     memory.checkGrants = true;
+        //     break;
 
         case "-c":
         case "--compare":
@@ -224,6 +226,10 @@ function __validateCompareConfig() {
 
         if (!memory.config.options.schemaCompare.hasOwnProperty("namespaces"))
             throw new Error('The configuration section "options.schemaCompare" must contains property "namespaces (array of strings)" !');
+
+        if (!memory.config.options.schemaCompare.hasOwnProperty("indexes"))
+            throw new Error('The configuration section "options.schemaCompare" must contains property "indexes (boolean)" !');
+
 
         if (!memory.config.options.schemaCompare.hasOwnProperty("idempotentScript"))
             throw new Error('The configuration section "options.schemaCompare" must contains property "idempotentScript (boolean)" !');

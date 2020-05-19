@@ -248,7 +248,8 @@ var helper = {
                         if (column.adsrc && column.adsrc.startsWith('nextval') && column.adsrc.includes('_seq')) {
                             defaultValue = '';
                             dataType = 'serial';
-                        };
+                        }
+                        ;
                         break;
                 }
 
@@ -286,32 +287,36 @@ var helper = {
                 }
             });
 
-            helper.__updateProgressbar(helper.__progressBarValue + progressBarStep, `Collecting INDEXES for table ${fullTableName}`);
 
-            //Get table indexes
-            let indexes = await client.query(query.getTableIndexes(table.schemaname, table.tablename))
-            indexes.rows.forEach(index => {
-                result[fullTableName].indexes[index.indexname] = {
-                    definition: index.indexdef
-                }
-            });
+            if (memory.config.options.schemaCompare.indexes){
+                helper.__updateProgressbar(helper.__progressBarValue + progressBarStep, `Collecting INDEXES for table ${fullTableName}`);
 
-            helper.__updateProgressbar(helper.__progressBarValue + progressBarStep, `Collecting PRIVILEGES for table ${fullTableName}`);
+                //Get table indexes
+                let indexes = await client.query(query.getTableIndexes(table.schemaname, table.tablename))
+                indexes.rows.forEach(index => {
+                    result[fullTableName].indexes[index.indexname] = {
+                        definition: index.indexdef
+                    }
+                });
+            }
 
-            //Get table privileges
-            let privileges = await client.query(query.getTablePrivileges(table.schemaname, table.tablename))
-            privileges.rows.forEach(privilege => {
-                result[fullTableName].privileges[privilege.usename] = {
-                    select: privilege.select,
-                    insert: privilege.insert,
-                    update: privilege.update,
-                    delete: privilege.delete,
-                    truncate: privilege.truncate,
-                    references: privilege.references,
-                    trigger: privilege.trigger
-                }
-            });
+            if (memory.config.options.schemaCompare.grants) {
+                helper.__updateProgressbar(helper.__progressBarValue + progressBarStep, `Collecting PRIVILEGES for table ${fullTableName}`);
 
+                //Get table privileges
+                let privileges = await client.query(query.getTablePrivileges(table.schemaname, table.tablename))
+                privileges.rows.forEach(privilege => {
+                    result[fullTableName].privileges[privilege.usename] = {
+                        select: privilege.select,
+                        insert: privilege.insert,
+                        update: privilege.update,
+                        delete: privilege.delete,
+                        truncate: privilege.truncate,
+                        references: privilege.references,
+                        trigger: privilege.trigger
+                    }
+                });
+            }
             //TODO: Missing discovering of PARTITION
             //TODO: Missing discovering of TRIGGER
             //TODO: Missing discovering of GRANTS for COLUMNS
